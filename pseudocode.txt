@@ -1,0 +1,58 @@
+include glfw
+include glad
+
+class cube
+    26 pieces
+    operations
+
+    function draw
+        for piece in pieces
+            draw piece
+
+enum mode
+    tutorial
+    solve
+    review
+
+enum tutorialmode
+    beginner
+    advanced beginner
+    cfop
+    advanced cfop
+    zz
+    roux
+
+enum practicemode
+    cross
+    F2L
+    OLL
+    PLL
+    ZBLS
+    ZBLL
+
+mode currentMode
+
+function draw graphics
+    if currentMode is tutorial
+        switch
+            case beginner
+            case advanced beginner
+            case cfop
+            case advanced cfop
+            default
+    if currentMode is solve
+        show scramble
+        show timer
+    if currentMode is review
+        show list of solves as buttons
+
+function draw cube
+    cube.draw()
+
+int main
+    while loop
+        draw buttons and inputs
+        process inputs
+        draw graphics
+        draw cube
+        update window
