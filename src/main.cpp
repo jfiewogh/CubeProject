@@ -4,8 +4,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <map>
 
 using namespace std; 
+
+float width = 800.0f;
+float height = 600.0f;
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
 glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -35,24 +39,69 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "}\n\0";
 
 
+
+struct Facelet {
+    glm::vec4 color;
+    glm::vec3 position;
+}
+
+struct Face {
+    // 0 is top left
+    // 8 is bottom right
+    std::vector<Facelet> facelets(9);
+}
+
+vector<glm::vec4> faceColors = {
+    // top
+    glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+    // front
+    glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
+    // left
+    glm::vec4(1.0f, 0.5f, 0.0f, 1.0f),
+    // back
+    glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
+    // right
+    glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+    // bottom
+    glm::vec4(1.0f, 1.0f, 0.0f, 1.0f)
+};
+
+vector<Face> faces(6);
+
 void processInput(GLFWwindow *window) {
+    // escape button closes window
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
-    } else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-        glClearColor(1.0f, 0.25f, 0.25f, 1.0f);
+    } 
+
+    // define cube interact buttons
+    // only when in solving mode
+
+    // R (right face clockwise/up)
+    else if (glfwGetKey(window, GLFW_KEY_I)) {       
+    }
+    // R' (right face counterclockwise/down)
+    else if (glfwGetKey(window, GLFW_KEY_K)) {
+    }
+    // L
+    else if (glfwGetKey(window, GLFW_KEY_E)) {
+    }
+    // L'
+    else if (glfwGetKey(window, GLFW_KEY_D)) {
+    }
+    // U
+    else if (glfwGetKey(window, GLFW_KEY_J)) {
+    }
+    // U'
+    else if (glfwGetKey(window, GLFW_KEY_F)) {
+    }
+    // F
+    else if (glfwGetKey(window, GLFW_KEY_H)) {
+    }
+    // F'
+    else if (glfwGetKey(window, GLFW_KEY_G)) {
     }
 }
-
-
-
-void drawFace() {
-
-}
-
-void drawCube() {
-    // for each of 6 faces, do drawFace(); 
-}
-
 
 int main() {
     GLFWwindow* window;
@@ -60,7 +109,7 @@ int main() {
         cout << "GLFW couldn't start" << endl;
         return -1;
     }
-    window = glfwCreateWindow(800, 600, "CubeProject", NULL, NULL);
+    window = glfwCreateWindow(width, height, "CubeProject", NULL, NULL);
     glfwMakeContextCurrent(window);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -68,18 +117,7 @@ int main() {
         return -1;
     }
 
-
-    float vertices[] = {
-        0.24f, 0.24f, 0.0f,
-        0.24f, -0.24f, 0.0f,
-        -0.24f, -0.24f, 0.0f,
-        -0.24f, 0.24, 0.0f
-    };
-    GLuint indices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
-
+    // positions of each facelet relative to center
     glm::vec3 positions[] = {
         glm::vec3(-0.5f, -0.5f, 0.5f),
         glm::vec3(-0.5f, 0.0f, 0.5f),
@@ -110,7 +148,6 @@ int main() {
     glDeleteShader(fragmentShader);
 
 
-
     GLuint VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -119,36 +156,27 @@ int main() {
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
 
-
     // Set background color
     glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
-
-
 
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
 
-        // glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::rotate(model, (float)glfwGetTime() * glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
-        // const float radius = 10.0f;
-        // float camX = sin(glfwGetTime()) * radius;
-        // float camZ = cos(glfwGetTime()) * radius;
-        glm::mat4 view = glm::mat4(1.0f);
-        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-        // view = glm::lookAt(glm::vec3(camX, 0.0, camZ), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
+        const float radius = 10.0f;
+        float camX = sin(glfwGetTime()) * radius;
+        float camZ = cos(glfwGetTime()) * radius;
+        glm::mat4 view;
+        view = glm::lookAt(glm::vec3(camX, 0.0, camZ), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
 
         glm::mat4 projection;
-        projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 100.0f);
 
         // clear color buffer
         glClear(GL_COLOR_BUFFER_BIT);
@@ -156,31 +184,45 @@ int main() {
         // activate shader
         glUseProgram(shaderProgram);
 
-        // update uniform
-
+        // update uniform matrix
         int viewLoc = glGetUniformLocation(shaderProgram, "view");
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         int projectionLoc = glGetUniformLocation(shaderProgram, "projection");
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-
-        float timeValue = glfwGetTime();
-        float redValue = cos(timeValue) / 2.0f + 0.5f;
-        float greenValue = sin(timeValue) / 2.0f + 0.5f;
-        int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
-        glUniform4f(vertexColorLocation, redValue, greenValue, 0.0f, 1.0f);
-
-        // render triangle
+        // bind vertex array
         glBindVertexArray(VAO);
 
-        for (unsigned int i = 0; i < 9; i++) {
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::rotate(model, (float)glfwGetTime() * glm::radians(20.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::translate(model, positions[i]);
-            int modelLoc = glGetUniformLocation(shaderProgram, "model");
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        // loop through faces
+        for (unsigned int f = 0; f < 6; f++) {
+            Face face = faces[f];
+            glm::vec4 color = face.color;
+
+            // should be based on the face
+            float xRadians = (float) glfwGetTime() * glm::radians(20.0f);
+            float yRadians = glm::radians(0.0f);
+            float zRadians = glm::radians(0.0f);
+    
+            // loop through facelets
+            for (unsigned int i = 0; i < 9; i++) {
+                glm::mat4 model = glm::mat4(1.0f);
+
+                // rotate x
+                model = glm::rotate(model, xRadians, glm::vec3(1.0f, 0.0f, 0.0f));
+                // rotate y
+                model = glm::rotate(model, yRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+                // rotate z
+                model = glm::rotate(model, zRadians, glm::vec3(0.0f, 0.0f, 1.0f));
+
+                model = glm::translate(model, positions[i]);     
+                
+                int modelLoc = glGetUniformLocation(shaderProgram, "model");
+                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+                
+                // add color
+
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+            }
         }
 
         // swap buffers and poll events
