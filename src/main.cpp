@@ -5,6 +5,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <map>
+#include <vector>
+
+// good example:
+// https://github.com/kavan010/gravity_sim/blob/main/gravity_sim.cpp#L59
+
+// learn:
+// https://learnopengl.com/book/book_pdf.pdf
+// https://learnopengl.com/Getting-started/Hello-Triangle
 
 using namespace std; 
 
@@ -39,17 +47,16 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "}\n\0";
 
 
+// more constants
 
-struct Facelet {
-    glm::vec4 color;
-    glm::vec3 position;
-}
-
-struct Face {
-    // 0 is top left
-    // 8 is bottom right
-    std::vector<Facelet> facelets(9);
-}
+vector<glm::vec3> faceRotations = {
+    glm::vec3(90, 0, 0),
+    glm::vec3(0, 0, 0),
+    glm::vec3(0, 90, 0),
+    glm::vec3(0, 180, 0),
+    glm::vec3(0, 270, 0),
+    glm::vec3(-90, 0, 0),
+};
 
 vector<glm::vec4> faceColors = {
     // top
@@ -64,6 +71,70 @@ vector<glm::vec4> faceColors = {
     glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
     // bottom
     glm::vec4(1.0f, 1.0f, 0.0f, 1.0f)
+};
+
+
+// THE EPIC CODE IS BELOW!
+
+class Cube {
+    public:
+    vector<vector<FaceletObject>> facelets;
+
+    Cube() {
+        // Initialize facelets
+        for (int f = 0; f < 6; f++) {
+            vector<FaceletObject> face;
+            for (int fl = 0; fl < 9; fl++) {
+                face.push_back(FaceletObject(faceColors[f]));
+            }
+            facelets.push_back(face);
+        }
+    }
+
+    void updateVertices() {
+        for (vector<FaceletObject> face : facelets) {
+            for (FaceletObject facelet : face) {
+                facelet.updateVertices();
+            }
+        }
+    }
+};
+
+class FaceletObject {
+    public:
+    GLuint VAO, VBO;
+    glm::vec4 color;
+
+    FaceletObject(glm::vec4 color) {
+        this->color = color;
+    }
+
+    std::vector<float> draw() {
+        std::vector<float> vertices = {
+            0.5f,  0.5f, 0.0f,
+            0.5f, -0.5f, 0.0f,
+            -0.5f, -0.5f, 0.0f,
+            -0.5f,  0.5f, 0.0f
+        };
+        return vertices;
+    }
+
+    void updateVertices() {
+        std::vector<float> vertices = draw();
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data());
+    }
+};
+
+struct Facelet {
+    glm::vec4 color;
+    glm::vec3 position;
+};
+
+struct Face {
+    // 0 is top left
+    // 8 is bottom right
+    vector<Facelet> facelets;
 };
 
 vector<Face> faces(6);
@@ -148,6 +219,22 @@ int main() {
     glDeleteShader(fragmentShader);
 
 
+    Cube cube;
+
+
+
+    float vertices[] = {
+        // positions
+        0.5f,  0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f,
+        -0.5f, -0.5f, 0.0f,
+        -0.5f,  0.5f, 0.0f
+    };
+    unsigned int indices[] = {
+        0, 1, 3,
+        1, 2, 3
+    };
+
     GLuint VAO, VBO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -156,8 +243,10 @@ int main() {
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -166,12 +255,22 @@ int main() {
     // Set background color
     glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
 
+
+    GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
+    GLint colorLoc = glGetUniformLocation(shaderProgram, "ourColor");
+
+
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
 
+
+        float timeValue = glfwGetTime();
+
+
+
         const float radius = 10.0f;
-        float camX = sin(glfwGetTime()) * radius;
-        float camZ = cos(glfwGetTime()) * radius;
+        float camX = sin(timeValue) * radius;
+        float camZ = cos(timeValue) * radius;
         glm::mat4 view;
         view = glm::lookAt(glm::vec3(camX, 0.0, camZ), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
 
@@ -193,15 +292,19 @@ int main() {
         // bind vertex array
         glBindVertexArray(VAO);
 
+        cube.updateVertices();
+
         // loop through faces
         for (unsigned int f = 0; f < 6; f++) {
             Face face = faces[f];
-            glm::vec4 color = face.color;
+            glm::vec4 color = faceColors[f];
+            glUniform4f(colorLoc, color.r, color.g, color.b, 1.0f);
 
             // should be based on the face
-            float xRadians = (float) glfwGetTime() * glm::radians(20.0f);
-            float yRadians = glm::radians(0.0f);
-            float zRadians = glm::radians(0.0f);
+            glm::vec3 rotation = faceRotations[f];
+            float xRadians = glm::radians(rotation.x);
+            float yRadians = glm::radians(rotation.y);
+            float zRadians = glm::radians(rotation.z);
     
             // loop through facelets
             for (unsigned int i = 0; i < 9; i++) {
@@ -216,10 +319,7 @@ int main() {
 
                 model = glm::translate(model, positions[i]);     
                 
-                int modelLoc = glGetUniformLocation(shaderProgram, "model");
                 glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-                
-                // add color
 
                 glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
             }
