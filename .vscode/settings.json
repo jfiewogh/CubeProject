@@ -1,3 +1,7 @@
 {
-    "cmake.sourceDirectory": "C:/Users/S10034701/Documents/Projects/CubeProject/include/glm"
+    "cmake.sourceDirectory": "C:/Users/S10034701/Documents/Projects/CubeProject/include/glm",
+    "files.associations": {
+        "cmath": "cpp",
+        "vector": "cpp"
+    }
 }

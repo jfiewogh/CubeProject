@@ -19,12 +19,11 @@ using namespace std;
 float width = 800.0f;
 float height = 600.0f;
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+const double PI = 3.14159265358979323846;
+
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 1.0f);
 glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
-glm::vec3 cameraDirection = glm::normalize(cameraPos - cameraTarget);
-glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-glm::vec3 cameraRight = glm::normalize(glm::cross(up, cameraDirection));
-glm::vec3 cameraUp = glm::cross(cameraDirection, cameraRight);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 // Shader sources
 const char *vertexShaderSource = "#version 330 core\n"
@@ -50,18 +49,18 @@ const char *fragmentShaderSource = "#version 330 core\n"
 // more constants
 
 vector<glm::vec3> faceRotations = {
-    glm::vec3(90, 0, 0),
+    glm::vec3(-90, 0, 0),
     glm::vec3(0, 0, 0),
     glm::vec3(0, 90, 0),
     glm::vec3(0, 180, 0),
     glm::vec3(0, 270, 0),
-    glm::vec3(-90, 0, 0),
+    glm::vec3(90, 0, 0),
 };
 
 // initial face colors
 vector<glm::vec4> faceColors = {
     // top
-    glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+    glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
     // front
     glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
     // right
@@ -75,24 +74,24 @@ vector<glm::vec4> faceColors = {
 };
 
 vector<glm::vec2> faceletOffsets = {
-    // x is row
-    // y is column
-    glm::vec2(-1.1f, -1.1f),
-    glm::vec2(-1.1f, 0.0f),
     glm::vec2(-1.1f, 1.1f),
-    glm::vec2(0.0f, -1.1f),
-    glm::vec2(0.0f, 0.0f),
     glm::vec2(0.0f, 1.1f),
-    glm::vec2(1.1f, -1.1f),
+    glm::vec2(1.1f, 1.1f),
+
+    glm::vec2(-1.1f, 0.0f),
+    glm::vec2(0.0f, 0.0f),
     glm::vec2(1.1f, 0.0f),
-    glm::vec2(1.1f, 1.1f)
+
+    glm::vec2(-1.1f, -1.1f),
+    glm::vec2(0.0f, -1.1f),
+    glm::vec2(1.1f, -1.1f)
 };
 
 
 // THE CODE IS BELOW!
 
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount);
-void updateCam(float timeValue);
+void updateCam(float radians);
 void processInput(GLFWwindow *window);
 
 class FaceletObject {
@@ -121,18 +120,9 @@ class FaceletObject {
         return vertices;
     }
 
-    void updateVertices() {
-        // Get new vertices
-        std::vector<float> vertices = draw();
-
-        // Update VBO with new vertices
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-    }
-
     glm::vec3 getPosition(int faceIndex, int faceletIndex) {
         glm::vec2 offset = faceletOffsets[faceletIndex];
-        return glm::vec3(offset.x, offset.y, 1.56f);
+        return glm::vec3(offset.x, offset.y, 1.6f);
     }
     glm::vec3 getRotation(int faceIndex) {
         return faceRotations[faceIndex];
@@ -164,28 +154,135 @@ class Cube {
         }
     }
 
-    void updateVertices() {
-        for (vector<FaceletObject> face : facelets) {
-            for (FaceletObject facelet : face) {
-                facelet.updateVertices();
-            }
-        }
+    void resetFacelets() {
+        facelets.clear();
+        initializeFacelets();
+    }
+
+    // previous is next
+    void swapFour(int r1, int c1, int r2, int c2, int r3, int c3, int r4, int c4) {
+        FaceletObject temp = facelets[r1][c1];
+        facelets[r1][c1] = facelets[r2][c2];
+        facelets[r2][c2] = facelets[r3][c3];
+        facelets[r3][c3] = facelets[r4][c4];
+        facelets[r4][c4] = temp;
     }
 
     void moveFaceCW(int index) {
-        FaceletObject temp = facelets[index][0];
-        facelets[index][0] = facelets[index][6];
-        facelets[index][6] = facelets[index][8];
-        facelets[index][8] = facelets[index][2];
-        facelets[index][2] = temp;
+        swapFour(index, 0, index, 6, index, 8, index, 2);
+        swapFour(index, 1, index, 3, index, 7, index, 5);
+    }
+    void moveFaceCCW(int index) {
+        swapFour(index, 0, index, 2, index, 8, index, 6);
+        swapFour(index, 5, index, 7, index, 3, index, 1);
     }
 
-    void moveFaceCCW(int index) {
-        FaceletObject temp = facelets[index][0];
-        facelets[index][0] = facelets[index][2];
-        facelets[index][2] = facelets[index][8];
-        facelets[index][8] = facelets[index][6];
-        facelets[index][6] = temp;
+    // Face
+    void U() {
+        moveFaceCW(0);
+        swapFour(1, 0, 2, 0, 3, 0, 4, 0);
+        swapFour(1, 1, 2, 1, 3, 1, 4, 1);
+        swapFour(1, 2, 2, 2, 3, 2, 4, 2);
+    }
+    void UPrime() {
+        moveFaceCCW(0);
+        swapFour(4, 0, 3, 0, 2, 0, 1, 0);
+        swapFour(4, 1, 3, 1, 2, 1, 1, 1);
+        swapFour(4, 2, 3, 2, 2, 2, 1, 2);
+    }
+    void R() {
+        moveFaceCW(2);
+        swapFour(0, 2, 1, 2, 5, 2, 3, 6);
+        swapFour(0, 5, 1, 5, 5, 5, 3, 3);
+        swapFour(0, 8, 1, 8, 5, 8, 3, 0);
+    }
+    void RPrime() {
+        moveFaceCCW(2);
+        swapFour(3, 6, 5, 2, 1, 2, 0, 2);
+        swapFour(3, 3, 5, 5, 1, 5, 0, 5);
+        swapFour(3, 0, 5, 8, 1, 8, 0, 8);
+    }
+    void L() {
+        moveFaceCW(4);
+        swapFour(3, 8, 5, 0, 1, 0, 0, 0);
+        swapFour(3, 5, 5, 3, 1, 3, 0, 3);
+        swapFour(3, 2, 5, 6, 1, 6, 0, 6);
+    }
+    void LPrime() {
+        moveFaceCCW(4);
+        swapFour(0, 0, 1, 0, 5, 0, 3, 8);
+        swapFour(0, 3, 1, 3, 5, 3, 3, 5);
+        swapFour(0, 6, 1, 6, 5, 6, 3, 2);
+    }
+    void F() {
+        moveFaceCW(1);
+        swapFour(0, 6, 4, 8, 5, 2, 2, 0);
+        swapFour(0, 7, 4, 5, 5, 1, 2, 3);
+        swapFour(0, 8, 4, 2, 5, 0, 2, 6);
+    }
+    void FPrime() {
+        moveFaceCCW(1);
+        swapFour(2, 0, 5, 2, 4, 8, 0, 6);
+        swapFour(2, 3, 5, 1, 4, 5, 0, 7);
+        swapFour(2, 6, 5, 0, 4, 2, 0, 8);
+    }
+    void D() {
+        moveFaceCW(5);
+        swapFour(1, 6, 4, 6, 3, 6, 2, 6);
+        swapFour(1, 7, 4, 7, 3, 7, 2, 7);
+        swapFour(1, 8, 4, 8, 3, 8, 2, 8);
+    }
+    void DPrime() {
+        moveFaceCCW(5);
+        swapFour(2, 6, 3, 6, 4, 6, 1, 6);
+        swapFour(2, 7, 3, 7, 4, 7, 1, 7);
+        swapFour(2, 8, 3, 8, 4, 8, 1, 8);
+    }
+    void B() {
+        moveFaceCW(3);
+        swapFour(2, 8, 5, 6, 4, 0, 0, 2);
+        swapFour(2, 5, 5, 7, 4, 3, 0, 1);
+        swapFour(2, 2, 5, 8, 4, 6, 0, 0);
+    }
+    void BPrime() {
+        moveFaceCCW(3);
+        swapFour(0, 2, 4, 0, 5, 6, 2, 8);
+        swapFour(0, 1, 4, 3, 5, 7, 2, 5);
+        swapFour(0, 0, 4, 6, 5, 8, 2, 2);
+    }
+
+    // Slice
+    
+    void M() {
+        swapFour(0, 4, 3, 4, 5, 4, 1, 4);
+        swapFour(0, 1, 3, 7, 5, 1, 1, 1);
+        swapFour(0, 7, 3, 1, 5, 7, 1, 7);
+    }
+    void MPrime() {
+        swapFour(1, 4, 5, 4, 3, 4, 0, 4);
+        swapFour(1, 1, 5, 1, 3, 7, 0, 1);
+        swapFour(1, 7, 5, 7, 3, 1, 0, 7);
+
+    }
+    void S() {
+        swapFour(4, 1, 5, 3, 2, 7, 0, 5);
+        swapFour(4, 4, 5, 4, 2, 4, 0, 4);
+        swapFour(4, 7, 5, 5, 2, 1, 0, 3);
+    }
+    void SPrime() {
+        swapFour(0, 5, 2, 7, 5, 3, 4, 1);
+        swapFour(0, 4, 2, 4, 5, 4, 4, 4);
+        swapFour(0, 3, 2, 1, 5, 5, 4, 7);
+    }
+    void E() {
+        swapFour(4, 3, 3, 3, 2, 3, 1, 3);
+        swapFour(4, 4, 3, 4, 2, 4, 1, 4);
+        swapFour(4, 5, 3, 5, 2, 5, 1, 5);
+    }
+    void EPrime() {
+        swapFour(1, 3, 2, 3, 3, 3, 4, 3);
+        swapFour(1, 4, 2, 4, 3, 4, 4, 4);
+        swapFour(1, 5, 2, 5, 3, 5, 4, 5);
     }
 };
 
@@ -239,6 +336,7 @@ int main() {
     GLint colorLoc = glGetUniformLocation(shaderProgram, "ourColor");
 
 
+    // reset facelets
     cube.initializeFacelets();
 
     while (!glfwWindowShouldClose(window)) {
@@ -246,7 +344,7 @@ int main() {
 
         processInput(window);
 
-        updateCam(timeValue);
+        updateCam(PI / 2);
 
         // clear color buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -306,52 +404,257 @@ void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertex
     glBindVertexArray(0);
 }
 
-void updateCam(float timeValue) {
-    const float radius = 10.0f;
-    float camX = sin(timeValue) * radius;
-    float camZ = cos(timeValue) * radius;
-    view = glm::lookAt(glm::vec3(camX, 0.0, camZ), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
+void updateCam(float yRad) {
+    const float radius = 7.0f;
+
+    cameraPos.x = cos(yRad) * radius;
+    cameraPos.y = sin(PI / 4) * radius;
+    cameraPos.z = sin(yRad) * radius;
+
+    view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
 
     projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 100.0f);
 }
+
+bool keyIPressed = false;
+bool keyKPressed = false;
+bool keyEPressed = false;
+bool keyDPressed = false;
+bool keyJPressed = false;
+bool keyFPressed = false;
+bool keyHPressed = false;
+bool keyGPressed = false;
+bool keyPeriodPressed = false;
+bool keyCommaPressed = false;
+bool keySPressed = false;
+bool keyLPressed = false;
+bool keyWPressed = false;
+bool keyOPressed = false;
+bool key6Pressed = false;
+bool key5Pressed = false;
+bool key4Pressed = false;
+bool key7Pressed = false;
+bool keyXPressed = false;
+bool keyCPressed = false;
 
 void processInput(GLFWwindow *window) {
     // escape button closes window
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     } 
+
+    /* Moves */
+
     // R (right face up)
-    else if (glfwGetKey(window, GLFW_KEY_I)) {
-        cout << "R" << endl;
-        cube.moveFaceCW(2);       
+    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
+        if (!keyIPressed) {
+            cube.R();   
+            keyIPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_RELEASE) {
+        keyIPressed = false;
     }
     // R' (right face down)
-    else if (glfwGetKey(window, GLFW_KEY_K)) {
-        cout << "R'" << endl;
-        cube.moveFaceCCW(2);
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+        if (!keyKPressed) {
+            cube.RPrime();   
+            keyKPressed = true; 
+        }
     }
+    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
+        keyKPressed = false;
+    }
+
     // L (left face down)
-    else if (glfwGetKey(window, GLFW_KEY_E)) {
-        cube.moveFaceCW(3);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        if (!keyDPressed) {
+            cube.L();   
+            keyDPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE) {
+        keyDPressed = false;
     }
     // L' (left face up)
-    else if (glfwGetKey(window, GLFW_KEY_D)) {
-        cube.moveFaceCCW(3);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        if (!keyEPressed) {
+            cube.LPrime();   
+            keyEPressed = true; 
+        }
     }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_RELEASE) {
+        keyEPressed = false;
+    }
+
     // U
-    else if (glfwGetKey(window, GLFW_KEY_J)) {
-        cube.moveFaceCW(0);
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
+        if (!keyJPressed) {
+            cube.U();
+            keyJPressed = true;
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_RELEASE) {
+        keyJPressed = false;
     }
     // U'
-    else if (glfwGetKey(window, GLFW_KEY_F)) {
-        cube.moveFaceCCW(0);
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+        if (!keyFPressed) {
+            cube.UPrime();
+            keyFPressed = true;
+        }
     }
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
+        keyFPressed = false;
+    }
+
     // F
-    else if (glfwGetKey(window, GLFW_KEY_H)) {
-        cube.moveFaceCW(1);
+    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
+        if (!keyHPressed) {
+            cube.F();   
+            keyHPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE) {
+        keyHPressed = false;
     }
     // F'
-    else if (glfwGetKey(window, GLFW_KEY_G)) {
-        cube.moveFaceCCW(1);
+    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+        if (!keyGPressed) {
+            cube.FPrime();   
+            keyGPressed = true; 
+        }
     }
+    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_RELEASE) {
+        keyGPressed = false;
+    }
+
+    // M'
+    if (glfwGetKey(window, GLFW_KEY_PERIOD) == GLFW_PRESS) {
+        if (!keyPeriodPressed) {
+            cube.MPrime();   
+            keyPeriodPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_PERIOD) == GLFW_RELEASE) {
+        keyPeriodPressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+        if (!keyXPressed) {
+            cube.MPrime();   
+            keyXPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_RELEASE) {
+        keyXPressed = false;
+    }
+    // M
+    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_PRESS) {
+        if (!keyCommaPressed) {
+            cube.M();   
+            keyCommaPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_RELEASE) {
+        keyCommaPressed = false;
+    }
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+        if (!keyCPressed) {
+            cube.M();   
+            keyCPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
+        keyCPressed = false;
+    }
+
+    // D
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        if (!keySPressed) {
+            cube.D();   
+            keySPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE) {
+        keySPressed = false;
+    }
+    // D'
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        if (!keyLPressed) {
+            cube.DPrime();   
+            keyLPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_RELEASE) {
+        keyLPressed = false;
+    }
+
+    // B
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        if (!keyWPressed) {
+            cube.B();   
+            keyWPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE) {
+        keyWPressed = false;
+    }
+    // B'
+    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+        if (!keyOPressed) {
+            cube.BPrime();   
+            keyOPressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_RELEASE) {
+        keyOPressed = false;
+    }
+
+    // S
+    if (glfwGetKey(window, GLFW_KEY_6) == GLFW_PRESS) {
+        if (!key6Pressed) {
+            cube.S();   
+            key6Pressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_6) == GLFW_RELEASE) {
+        key6Pressed = false;
+    }
+    // S'
+    if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) {
+        if (!key5Pressed) {
+            cube.SPrime();   
+            key5Pressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_5) == GLFW_RELEASE) {
+        key5Pressed = false;
+    }
+
+    // E 4
+    if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) {
+        if (!key4Pressed) {
+            cube.E();   
+            key4Pressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_4) == GLFW_RELEASE) {
+        key4Pressed = false;
+    }
+    // E' 7
+    if (glfwGetKey(window, GLFW_KEY_7) == GLFW_PRESS) {
+        if (!key7Pressed) {
+            cube.EPrime();   
+            key7Pressed = true; 
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_7) == GLFW_RELEASE) {
+        key7Pressed = false;
+    }
+
+    /* Rotate Cube */
+
+    // a and ; for y
+    // b and t for x
+    // z and / for z
 }
