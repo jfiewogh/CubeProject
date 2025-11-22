@@ -1,4 +1,4 @@
-#Cube Project
+# Cube Project
 This is an app to help you improve your cubing skills by playing with a virtual cube.
 ## Progress
 - This is mostly unfinished.
