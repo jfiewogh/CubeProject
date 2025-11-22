@@ -18,40 +18,16 @@ This app allows you to scramble and solve a Rubik's cube and see your time.
 #include <vector>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include "Shader.h"
 
 using namespace std; 
 
-float width = 1000.0f;
-float height = 600.0f;
+const float width = 1500.0f;
+const float height = 1000.0f;
 
 const double PI = 3.14159265358979323846;
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 1.0f);
-glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-// Shader sources
-const char *vertexShaderSource = "#version 330 core\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "out vec4 vertexColor;\n"
-    "uniform mat4 model;\n"
-    "uniform mat4 view;\n"
-    "uniform mat4 projection;\n"
-    "void main()\n"
-    "{\n"
-    "   gl_Position = projection * view * model * vec4(aPos, 1.0f);\n"
-    "   vertexColor = vec4(0.5, 0.0, 0.0, 1.0);\n"
-    "}\0";
-const char *fragmentShaderSource = "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "uniform vec4 ourColor;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = ourColor;\n"
-    "}\n\0";
-
-
-vector<glm::vec3> faceRotations = {
+const vector<glm::vec3> faceRotations = {
     glm::vec3(-90, 0, 0),
     glm::vec3(0, 0, 0),
     glm::vec3(0, 90, 0),
@@ -60,23 +36,23 @@ vector<glm::vec3> faceRotations = {
     glm::vec3(90, 0, 0),
 };
 
-// initial face colors
-vector<glm::vec4> faceColors = {
-    // top
+// starting face colors
+const vector<glm::vec4> faceColors = {
+    // top, white
     glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),
-    // front
-    glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
-    // right
-    glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
-    // back
-    glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
-    // left
-    glm::vec4(1.0f, 0.5f, 0.0f, 1.0f),
-    // bottom
-    glm::vec4(1.0f, 1.0f, 0.0f, 1.0f)
+    // front, green
+    glm::vec4(0.0f, 0.61f, 0.28f, 1.0f),
+    // right, red
+    glm::vec4(0.72f, 0.07f, 0.20f, 1.0f),
+    // back, blue
+    glm::vec4(0.0f, 0.27f, 0.68f, 1.0f),
+    // left, orange
+    glm::vec4(1.0f, 0.345f, 0.0f, 1.0f),
+    // bottom, yellow
+    glm::vec4(1.0f, 0.835f, 0.0f, 1.0f)
 };
 
-vector<glm::vec2> faceletOffsets = {
+const vector<glm::vec2> faceletOffsets = {
     glm::vec2(-1.1f, 1.1f),
     glm::vec2(0.0f, 1.1f),
     glm::vec2(1.1f, 1.1f),
@@ -90,15 +66,15 @@ vector<glm::vec2> faceletOffsets = {
     glm::vec2(1.1f, -1.1f)
 };
 
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 1.0f);
+glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
 std::map<string, std::function<void()>> possibleMoves;
-
-
-// THE CODE IS BELOW!
 
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount);
 void updateCam(float radians);
 void processInput(GLFWwindow *window);
-void renderText();
 
 class Facelet {
     public:
@@ -415,35 +391,122 @@ struct Character {
 std::map<char, Character> characters;
 
 class TextRenderer {
-    void load(string font, unsigned int fontSize) {
-        for (unsigned char c = 0; c < 128; c++) {
-            if (FT_Load_Char) {
+    public:
+    unsigned int VAO, VBO;
 
-            }
-        }
+    TextRenderer() {
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);  
     }
 
+    void loadFont(const char* filePath, int fontSize) {
+        FT_Library fontLibrary;
+        if (FT_Init_FreeType(&fontLibrary)) {
+            cout << "Library init failed" << endl;
+        }
 
-    void renderText(string text, float x, float y, float scale, glm::vec3 color) {
+        FT_Face fontFace;
+        if (FT_New_Face(fontLibrary, filePath, 0, &fontFace)) {
+            cout << "Failed to load font" << endl;
+        }
+        
+        FT_Set_Pixel_Sizes(fontFace, 0, fontSize);
 
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+        // load character glyph
+        for (unsigned char c = 0; c < 128; c++) {
+            if (FT_Load_Char(fontFace, c, FT_LOAD_RENDER)) {
+                cout << "Failed to load glyph" << endl;
+                continue;
+            }
+            // generate texture
+            unsigned int texture;
+            glGenTextures(1, &texture);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RED,
+                fontFace->glyph->bitmap.width,
+                fontFace->glyph->bitmap.rows,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                fontFace->glyph->bitmap.buffer
+            );
+            // set texture options
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            // now store character for later use
+            Character character = {
+                texture, 
+                glm::ivec2(fontFace->glyph->bitmap.width, fontFace->glyph->bitmap.rows),
+                glm::ivec2(fontFace->glyph->bitmap_left, fontFace->glyph->bitmap_top),
+                static_cast<unsigned int>(fontFace->glyph->advance.x)
+            };
+            characters.insert(std::pair<char, Character>(c, character));
+        }
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        FT_Done_Face(fontFace);
+        FT_Done_FreeType(fontLibrary);
+    }
+
+    void renderText(Shader &shader, string text, float x, float y, float scale, glm::vec3 color) {
+        glUniform3f(
+            glGetUniformLocation(shader.program, "textColor"), 
+            color.x, color.y, color.z);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(VAO);
+
+        std::string::const_iterator c;
+        for (c = text.begin(); c != text.end(); c++) {
+            Character character = characters[*c];
+
+            float xPos = x + character.bearing.x * scale;
+            float yPos = y - (character.size.y - character.bearing.y) * scale;
+
+            float width = character.size.x * scale;
+            float height = character.size.y * scale;
+
+            // Update VBO
+            float vertices[6][4] = {
+                {xPos, yPos + height, 0.0f, 0.0f},
+                {xPos, yPos, 0.0f, 1.0f},
+                {xPos + width, yPos, 1.0f, 1.0f},
+
+                {xPos, yPos + height, 0.0f, 0.0f},
+                {xPos + width, yPos, 1.0f, 1.0f},
+                {xPos + width, yPos + height, 1.0f, 0.0f}
+            };
+
+            glBindTexture(GL_TEXTURE_2D, character.textureID);
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            x += (character.advance >> 6) * scale;
+        }
+
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 };
-
-void loadFont(const char* filePath, int fontSize) {
-    FT_Library fontLibrary;
-    if (FT_Init_FreeType(&fontLibrary)) {
-        cout << "font library is not good" << endl;
-    }
-
-    FT_Face fontFace;
-    if (FT_New_Face(fontLibrary, filePath, 0, &fontFace)) {
-        cout << "font face is not good" << endl;
-    }
-    
-    FT_Set_Pixel_Sizes(fontFace, 0, fontSize);
-}
-
-// Instances
 
 Cube cube;
 
@@ -469,33 +532,7 @@ int main() {
         return -1;
     }
 
-    // Create Shader Program
-
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    // Set background color
-    glClearColor(0.25f, 0.5f, 0.75f, 1.0f);
-
-
-    GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
-    GLint colorLoc = glGetUniformLocation(shaderProgram, "ourColor");
-
-    // reset facelets
-    cube.initializeFacelets();
+    // Create cube
 
     possibleMoves = {
         {"R", std::bind(&Cube::R, &cube)},
@@ -521,23 +558,49 @@ int main() {
         {"Lw", std::bind(&Cube::Lw, &cube)}, 
         {"Lw'", std::bind(&Cube::LwPrime, &cube)}, 
     };
-    Rectangle top(glm::vec2(0, 0), glm::vec2(width, 50));
+
+    cube.initializeFacelets();
+    
+
+    // Create shader programs
+    // relative path not working for some reason
+
+    Shader shader(
+        "C:/Users/dchau/Documents/CS3/Project/src/shaders/vertex.txt", 
+        "C:/Users/dchau/Documents/CS3/Project/src/shaders/fragment.txt");
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    Shader textShader(
+        "C:/Users/dchau/Documents/CS3/Project/src/shaders/textVertex.txt", 
+        "C:/Users/dchau/Documents/CS3/Project/src/shaders/textFragment.txt");
+
+    // Set background color
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+
+
+    GLint modelLoc = glGetUniformLocation(shader.program, "model");
+    GLint colorLoc = glGetUniformLocation(shader.program, "fillColor");
+    GLint viewLoc = glGetUniformLocation(shader.program, "view");
+    GLint projectionLoc = glGetUniformLocation(shader.program, "projection");
+
+    // reset facelets
+    Rectangle top(glm::vec2(0, height - 50), glm::vec2(width, 50));
 
     // text
-    loadFont("C:/Users/dchau/Documents/CS3/Project/assets/fonts/arial.ttf", 20);
-
+    TextRenderer textRenderer;
+    textRenderer.loadFont("C:/Users/dchau/Documents/CS3/Project/assets/fonts/arial.ttf", 40);
 
     while (!glfwWindowShouldClose(window)) {
         float timeValue = glfwGetTime();
+
+        processInput(window);
 
         if (cubeIsSolved && !cube.isSolved() && performedMoves.size() == 1) {
             cout << "START!" << endl;
             solveStartTime = timeValue;
             cubeIsSolved = false;
-        }
-        if (!cubeIsSolved) {
-            // display time as text
-            // cout << timeValue - solveStartTime << endl;
         }
         if (!cubeIsSolved && cube.isSolved()) {
             cout << "YAY! Solved in " << timeValue - solveStartTime << endl;
@@ -545,8 +608,13 @@ int main() {
             cout << "Moves: " << performedMoves.size() << endl;
             performedMoves.clear();
         }
+        
 
-        processInput(window);
+        // clear color buffer
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // activate shader
+        shader.use();
 
         /* 3D */
 
@@ -554,16 +622,9 @@ int main() {
 
         updateCam(PI / 2);
 
-        // clear color buffer
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // activate shader
-        glUseProgram(shaderProgram);
-
         // update uniform matrix
-        int viewLoc = glGetUniformLocation(shaderProgram, "view");
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        int projectionLoc = glGetUniformLocation(shaderProgram, "projection");
+
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
         for (int f = 0; f < cube.facelets.size(); f++) {
@@ -596,20 +657,38 @@ int main() {
 
         glViewport(0, 0, width, height);
 
-        view = glm::mat4(1.0f);
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        projection = glm::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);  
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+
+        projection = glm::ortho(0.0f, width, 0.0f, height);  
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
 
         // do for each 2d element
         glm::mat4 model = glm::mat4(1.0f);
-        glUniform4f(colorLoc, 0.5f, 0.6f, 0.7f, 1.0f);
+        glUniform4f(colorLoc, 0.25f, 0.25f, 0.25f, 1.0f);
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
         glBindVertexArray(top.VAO);
         glDrawArrays(GL_TRIANGLES, 0, top.vertexCount / 3);
 
+        // text 
+        textShader.use();
+
+        glUniformMatrix4fv(
+            glGetUniformLocation(textShader.program, "projection"), 
+            1, 
+            GL_FALSE, 
+            glm::value_ptr(projection));
+
+        textRenderer.renderText(textShader, "Solve", 0.0f, height - 48, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+        if (!cubeIsSolved) {
+            // display time as text
+            textRenderer.renderText(
+                textShader,
+                std::to_string(timeValue - solveStartTime), 
+                0.0f, 0.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        }
 
         // swap buffers and poll events
         glfwSwapBuffers(window);
@@ -633,6 +712,7 @@ void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertex
     glBindVertexArray(0);
 }
 
+// for 3D
 void updateCam(float yRad) {
     const float radius = 7.0f;
 
