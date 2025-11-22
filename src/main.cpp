@@ -1,3 +1,10 @@
+/*
+Cube Project
+David Chau
+Comp Sci 3 Period 6
+This app allows you to scramble and solve a Rubik's cube and see your time.
+*/
+
 #include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -6,17 +13,15 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <map>
 #include <vector>
-
-// good example:
-// https://github.com/kavan010/gravity_sim/blob/main/gravity_sim.cpp#L59
-
-// learn:
-// https://learnopengl.com/book/book_pdf.pdf
-// https://learnopengl.com/Getting-started/Hello-Triangle
+#include <functional>
+#include <random>
+#include <vector>
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 using namespace std; 
 
-float width = 800.0f;
+float width = 1000.0f;
 float height = 600.0f;
 
 const double PI = 3.14159265358979323846;
@@ -39,14 +44,12 @@ const char *vertexShaderSource = "#version 330 core\n"
     "}\0";
 const char *fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
-    "uniform vec4 ourColor\n;"
+    "uniform vec4 ourColor;\n"
     "void main()\n"
     "{\n"
     "   FragColor = ourColor;\n"
     "}\n\0";
 
-
-// more constants
 
 vector<glm::vec3> faceRotations = {
     glm::vec3(-90, 0, 0),
@@ -87,20 +90,23 @@ vector<glm::vec2> faceletOffsets = {
     glm::vec2(1.1f, -1.1f)
 };
 
+std::map<string, std::function<void()>> possibleMoves;
+
 
 // THE CODE IS BELOW!
 
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount);
 void updateCam(float radians);
 void processInput(GLFWwindow *window);
+void renderText();
 
-class FaceletObject {
+class Facelet {
     public:
     GLuint VAO, VBO;
     size_t vertexCount;
     glm::vec4 color;
 
-    FaceletObject(glm::vec4 color) {
+    Facelet(glm::vec4 color) {
         this->color = color;
 
         std::vector<float> vertices = draw();
@@ -131,24 +137,13 @@ class FaceletObject {
 
 class Cube {
     public:
-    // 0 - U
-    // 1 - F
-    // 2 - R
-    // 3 - B
-    // 4 - L
-    // 5 - D
-
-    // 0 1 2
-    // 3 4 5
-    // 6 7 8
-
-    vector<vector<FaceletObject>> facelets;
+    vector<vector<Facelet>> facelets;
 
     void initializeFacelets() {
         for (int f = 0; f < 6; f++) {
-            vector<FaceletObject> face;
+            vector<Facelet> face;
             for (int fl = 0; fl < 9; fl++) {
-                face.push_back(FaceletObject(faceColors[f]));
+                face.push_back(Facelet(faceColors[f]));
             }
             facelets.push_back(face);
         }
@@ -159,9 +154,10 @@ class Cube {
         initializeFacelets();
     }
 
-    // previous is next
+    private:
+    // previous is assigned to next 
     void swapFour(int r1, int c1, int r2, int c2, int r3, int c3, int r4, int c4) {
-        FaceletObject temp = facelets[r1][c1];
+        Facelet temp = facelets[r1][c1];
         facelets[r1][c1] = facelets[r2][c2];
         facelets[r2][c2] = facelets[r3][c3];
         facelets[r3][c3] = facelets[r4][c4];
@@ -177,6 +173,7 @@ class Cube {
         swapFour(index, 5, index, 7, index, 3, index, 1);
     }
 
+    public:
     // Face
     void U() {
         moveFaceCW(0);
@@ -250,6 +247,23 @@ class Cube {
         swapFour(0, 1, 4, 3, 5, 7, 2, 5);
         swapFour(0, 0, 4, 6, 5, 8, 2, 2);
     }
+    // Wide
+    void Rw() {
+        R();
+        MPrime();
+    }
+    void RwPrime() {
+        RPrime();
+        M();
+    }
+    void LwPrime() {
+        LPrime();
+        MPrime();
+    }
+    void Lw() {
+        L();
+        M();
+    }
 
     // Slice
     void M() {
@@ -261,7 +275,6 @@ class Cube {
         swapFour(1, 4, 5, 4, 3, 4, 0, 4);
         swapFour(1, 1, 5, 1, 3, 7, 0, 1);
         swapFour(1, 7, 5, 7, 3, 1, 0, 7);
-
     }
     void S() {
         swapFour(4, 1, 5, 3, 2, 7, 0, 5);
@@ -283,6 +296,65 @@ class Cube {
         swapFour(1, 4, 2, 4, 3, 4, 4, 4);
         swapFour(1, 5, 2, 5, 3, 5, 4, 5);
     }
+
+    void Y() {
+        U(); 
+        EPrime(); 
+        DPrime();
+    }
+    void YPrime() {
+        UPrime(); 
+        E(); 
+        D();
+    }
+    void X() {
+        LPrime();
+        MPrime();
+        R();
+    }
+    void XPrime() {
+        L();
+        M();
+        RPrime();
+    }
+    void Z() {
+        F();
+        S();
+        BPrime();
+    }
+    void ZPrime() {
+        FPrime();
+        SPrime();
+        B();
+    }
+    
+    void scramble() {
+        vector<string> movesList = {"R", "R'", "L", "L'", "F", "F'", "B", "B'", "D", "D'", "U", "U'"};
+
+        std::random_device rd; // obtain a random number from hardware
+        std::mt19937 gen(rd()); // seed the generator
+        std::uniform_int_distribution<> distr(0, movesList.size() - 1); // define the range
+
+        for (int i = 0; i < 40; i++) {
+            int index = distr(gen);
+            possibleMoves.at(movesList.at(index))();
+        }
+    }
+    
+    bool isSolved() {
+        for (vector<Facelet> face : facelets) {
+            for (int i = 1; i < face.size(); i++) {
+                if (face[i].color != face[i - 1].color) {
+                    return false;   
+                }
+            }
+        }
+        return true;
+    }
+
+    void printSolved() {
+        cout << isSolved() << endl;
+    }
 };
 
 enum Mode {
@@ -295,47 +367,93 @@ enum TutorialPage {
 
 };
 
-// 2D graphics
-class GUI {
-    public:
-    GUI() {
+/* 2D Classes */
 
-    }
-
-    void drawTitle() {
-
-    }
-};
-
-class Triangle {
+class Rectangle {
     public:
     GLuint VAO, VBO;
     size_t vertexCount;
+    glm::vec2 position;
+    glm::vec2 size;
 
-    Triangle() {
-        std::vector<float> vertices = draw();
+    Rectangle(glm::vec2 position, glm::vec2 size) {
+        this->position = position;
+        this->size = size;
+
+        std::vector<float> vertices = getVertices();
         vertexCount = vertices.size();
         createVBOVAO(VAO, VBO, vertices.data(), vertexCount);
     }
 
-    std::vector<float> draw() {
+    private:
+    std::vector<float> getVertices() {
         std::vector<float> vertices = {
-            5.0f,  5.0f, 20.0f,
-            5.0f, -10.0f, 20.0f,
-            -10.0f, -10.0f, 20.0f
+            // first triangle
+            position.x, position.y, 0.0f,
+            position.x, position.y + size.y, 0.0f,
+            position.x + size.x, position.y + size.y, 0.0f,
+            // second triangle
+            position.x, position.y, 0.0f,
+            position.x + size.x, position.y, 0.0f,
+            position.x + size.x, position.y + size.y, 0.0f
         };
         return vertices;
     }
 };
 
+// text
+// FTbrary ft;
+// FT_Face face;_Li
+
+struct Character {
+    unsigned int textureID;
+    glm::ivec2 size;
+    glm::ivec2 bearing;
+    unsigned int advance;
+};
+
+std::map<char, Character> characters;
+
+class TextRenderer {
+    void load(string font, unsigned int fontSize) {
+        for (unsigned char c = 0; c < 128; c++) {
+            if (FT_Load_Char) {
+
+            }
+        }
+    }
+
+
+    void renderText(string text, float x, float y, float scale, glm::vec3 color) {
+
+    }
+};
+
+void loadFont(const char* filePath, int fontSize) {
+    FT_Library fontLibrary;
+    if (FT_Init_FreeType(&fontLibrary)) {
+        cout << "font library is not good" << endl;
+    }
+
+    FT_Face fontFace;
+    if (FT_New_Face(fontLibrary, filePath, 0, &fontFace)) {
+        cout << "font face is not good" << endl;
+    }
+    
+    FT_Set_Pixel_Sizes(fontFace, 0, fontSize);
+}
+
+// Instances
 
 Cube cube;
-GUI gui;
 
 glm::mat4 view;
 glm::mat4 projection;
 
-int a = 0;
+bool cubeIsSolved = true;
+float solveStartTime = 0;
+
+vector<pair<string, float>> performedMoves;
 
 int main() {
     GLFWwindow* window;
@@ -379,12 +497,54 @@ int main() {
     // reset facelets
     cube.initializeFacelets();
 
+    possibleMoves = {
+        {"R", std::bind(&Cube::R, &cube)},
+        {"R'", std::bind(&Cube::RPrime, &cube)},
+        {"L", std::bind(&Cube::L, &cube)},
+        {"L'", std::bind(&Cube::LPrime, &cube)},
+        {"U", std::bind(&Cube::U, &cube)},
+        {"U'", std::bind(&Cube::UPrime, &cube)},
+        {"F", std::bind(&Cube::F, &cube)},
+        {"F'", std::bind(&Cube::FPrime, &cube)},
+        {"B", std::bind(&Cube::B, &cube)},
+        {"B'", std::bind(&Cube::BPrime, &cube)},
+        {"D", std::bind(&Cube::D, &cube)},
+        {"D'", std::bind(&Cube::DPrime, &cube)},
+        {"S", std::bind(&Cube::S, &cube)}, 
+        {"S'", std::bind(&Cube::SPrime, &cube)}, 
+        {"E", std::bind(&Cube::E, &cube)}, 
+        {"E'", std::bind(&Cube::EPrime, &cube)}, 
+        {"M", std::bind(&Cube::M, &cube)}, 
+        {"M'", std::bind(&Cube::MPrime, &cube)}, 
+        {"Rw", std::bind(&Cube::Rw, &cube)}, 
+        {"Rw'", std::bind(&Cube::RwPrime, &cube)}, 
+        {"Lw", std::bind(&Cube::Lw, &cube)}, 
+        {"Lw'", std::bind(&Cube::LwPrime, &cube)}, 
+    };
+    Rectangle top(glm::vec2(0, 0), glm::vec2(width, 50));
 
-    Triangle tri;
+    // text
+    loadFont("C:/Users/dchau/Documents/CS3/Project/assets/fonts/arial.ttf", 20);
 
 
     while (!glfwWindowShouldClose(window)) {
         float timeValue = glfwGetTime();
+
+        if (cubeIsSolved && !cube.isSolved() && performedMoves.size() == 1) {
+            cout << "START!" << endl;
+            solveStartTime = timeValue;
+            cubeIsSolved = false;
+        }
+        if (!cubeIsSolved) {
+            // display time as text
+            // cout << timeValue - solveStartTime << endl;
+        }
+        if (!cubeIsSolved && cube.isSolved()) {
+            cout << "YAY! Solved in " << timeValue - solveStartTime << endl;
+            cubeIsSolved = true;
+            cout << "Moves: " << performedMoves.size() << endl;
+            performedMoves.clear();
+        }
 
         processInput(window);
 
@@ -408,7 +568,7 @@ int main() {
 
         for (int f = 0; f < cube.facelets.size(); f++) {
             for (int fl = 0; fl < cube.facelets[0].size(); fl++) {
-                FaceletObject facelet = cube.facelets[f][fl];
+                Facelet facelet = cube.facelets[f][fl];
                 
                 glm::mat4 model = glm::mat4(1.0f);
                 
@@ -426,31 +586,29 @@ int main() {
                 glUniform4f(colorLoc, color.r, color.g, color.b, color.a);
 
                 glBindVertexArray(facelet.VAO);
-                glDrawArrays(GL_TRIANGLES, 0, facelet.vertexCount);
+                glDrawArrays(GL_TRIANGLES, 0, facelet.vertexCount / 3);
             }
         }
 
         /* 2D */
 
-        // not working
-
         glDisable(GL_DEPTH_TEST);
-        cameraPos.x = 0;
-        cameraPos.y = 0;
-        cameraPos.z = 0;
-        view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
+
+        glViewport(0, 0, width, height);
+
+        view = glm::mat4(1.0f);
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        projection = glm::ortho(0.0f, width, height, 0.0f, 0.1f, 100.0f);  
+        projection = glm::ortho(0.0f, width, height, 0.0f, -1.0f, 1.0f);  
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        // glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::translate(model, glm::vec3(a, 0.0f, 0.0f));
-        // a = 0.1f;
-        glUniform4f(colorLoc, 0, 0, 0, 1);
-        // glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
-        glBindVertexArray(tri.VAO);
-        glDrawArrays(GL_TRIANGLES, 0, tri.vertexCount);
+        // do for each 2d element
+        glm::mat4 model = glm::mat4(1.0f);
+        glUniform4f(colorLoc, 0.5f, 0.6f, 0.7f, 1.0f);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+        glBindVertexArray(top.VAO);
+        glDrawArrays(GL_TRIANGLES, 0, top.vertexCount / 3);
 
 
         // swap buffers and poll events
@@ -479,379 +637,129 @@ void updateCam(float yRad) {
     const float radius = 7.0f;
 
     cameraPos.x = cos(yRad) * radius;
-    cameraPos.y = sin(PI / 4) * radius;
+    cameraPos.y = sin(PI / 3) * radius;
     cameraPos.z = sin(yRad) * radius;
 
     view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
 
-    projection = glm::perspective(glm::radians(45.0f), width / height, 1.0f, 100.0f);
+    projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 100.0f);
 }
 
-bool keyIPressed = false;
-bool keyKPressed = false;
-bool keyEPressed = false;
-bool keyDPressed = false;
-bool keyJPressed = false;
-bool keyFPressed = false;
-bool keyHPressed = false;
-bool keyGPressed = false;
-bool keyPeriodPressed = false;
-bool keyCommaPressed = false;
-bool keySPressed = false;
-bool keyLPressed = false;
-bool keyWPressed = false;
-bool keyOPressed = false;
-bool key6Pressed = false;
-bool key5Pressed = false;
-bool key4Pressed = false;
-bool key7Pressed = false;
-bool keyXPressed = false;
-bool keyCPressed = false;
+std::map<int, bool> keys;
 
-bool keyAPressed = false;
-bool keySemicolonPressed = false;
-bool keyTPressed = false;
-bool keyBPressed = false;
-bool keyPPressed = false;
-bool keyQPressed = false;
+// Use when you want to bind a key to a certain action
+void keyInput(GLFWwindow *window, int key, std::function<void()> action) {
+    // Add key to map if not there
+    if (keys.find(key) == keys.end()) {
+        keys[key] = false;
+    }
+    // When pressed, perform action (holding down does not repeat action)
+    if (glfwGetKey(window, key) == GLFW_PRESS) {
+        if (!keys[key]) {
+            action();
+            keys[key] = true;
+        }
+    } else if (glfwGetKey(window, key) == GLFW_RELEASE) {
+        keys[key] = false;
+    }
+}
 
-bool keyUPressed = false;
-bool keyMPressed = false;
-bool keyRPressed = false;
-bool keyVPressed = false;
+// Performs and records the move
+void performMove(string moveLetter) {
+    possibleMoves[moveLetter]();
+    performedMoves.push_back(pair<string, float> {moveLetter, glfwGetTime()});
+}
 
+// Use when you want to bind a key to a certain move
+void keyInputMove(GLFWwindow *window, int key, string moveLetter) {
+    // Add key to map if not there
+    if (keys.find(key) == keys.end()) {
+        keys[key] = false;
+    }
+    // When pressed, perform action (holding down does not repeat action)
+    if (glfwGetKey(window, key) == GLFW_PRESS) {
+        if (!keys[key]) {
+            performMove(moveLetter);
+            keys[key] = true;
+        }
+    } else if (glfwGetKey(window, key) == GLFW_RELEASE) {
+        keys[key] = false;
+    }
+}
+
+// Handles key inputs
 void processInput(GLFWwindow *window) {
-    // escape button closes window
+    // Escape button closes window
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     } 
 
-    /* Moves */
+    keyInput(window, GLFW_KEY_1, std::bind(&Cube::scramble, &cube));
+    keyInput(window, GLFW_KEY_2, std::bind(&Cube::printSolved, &cube));
 
-    // R (right face up)
-    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS) {
-        if (!keyIPressed) {
-            cube.R();   
-            keyIPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_I) == GLFW_RELEASE) {
-        keyIPressed = false;
-    }
-    // R' (right face down)
-    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-        if (!keyKPressed) {
-            cube.RPrime();   
-            keyKPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
-        keyKPressed = false;
-    }
-
-    // L (left face down)
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        if (!keyDPressed) {
-            cube.L();   
-            keyDPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_RELEASE) {
-        keyDPressed = false;
-    }
-    // L' (left face up)
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
-        if (!keyEPressed) {
-            cube.LPrime();   
-            keyEPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_RELEASE) {
-        keyEPressed = false;
-    }
-
+    /* Move Face */
+    // R
+    keyInputMove(window, GLFW_KEY_I, "R");
+    // R'
+    keyInputMove(window, GLFW_KEY_K, "R'");
+    // L
+    keyInputMove(window, GLFW_KEY_D, "L");
+    // L'
+    keyInputMove(window, GLFW_KEY_E, "L'");
     // U
-    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-        if (!keyJPressed) {
-            cube.U();
-            keyJPressed = true;
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_J) == GLFW_RELEASE) {
-        keyJPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_J, "U");
     // U'
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
-        if (!keyFPressed) {
-            cube.UPrime();
-            keyFPressed = true;
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_RELEASE) {
-        keyFPressed = false;
-    }
-
+    keyInputMove(window, GLFW_KEY_F, "U'");
     // F
-    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
-        if (!keyHPressed) {
-            cube.F();   
-            keyHPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE) {
-        keyHPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_H, "F");
     // F'
-    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
-        if (!keyGPressed) {
-            cube.FPrime();   
-            keyGPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_RELEASE) {
-        keyGPressed = false;
-    }
-
-    // M'
-    if (glfwGetKey(window, GLFW_KEY_PERIOD) == GLFW_PRESS) {
-        if (!keyPeriodPressed) {
-            cube.MPrime();   
-            keyPeriodPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_PERIOD) == GLFW_RELEASE) {
-        keyPeriodPressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
-        if (!keyXPressed) {
-            cube.MPrime();   
-            keyXPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_RELEASE) {
-        keyXPressed = false;
-    }
-    // M
-    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_PRESS) {
-        if (!keyCommaPressed) {
-            cube.M();   
-            keyCommaPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_COMMA) == GLFW_RELEASE) {
-        keyCommaPressed = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
-        if (!keyCPressed) {
-            cube.M();   
-            keyCPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
-        keyCPressed = false;
-    }
-
+    keyInputMove(window, GLFW_KEY_G, "F'");
     // D
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        if (!keySPressed) {
-            cube.D();   
-            keySPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_RELEASE) {
-        keySPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_S, "D");
     // D'
-    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-        if (!keyLPressed) {
-            cube.DPrime();   
-            keyLPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_RELEASE) {
-        keyLPressed = false;
-    }
-
+    keyInputMove(window, GLFW_KEY_L, "D'");
     // B
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        if (!keyWPressed) {
-            cube.B();   
-            keyWPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE) {
-        keyWPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_W, "B");
     // B'
-    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-        if (!keyOPressed) {
-            cube.BPrime();   
-            keyOPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_RELEASE) {
-        keyOPressed = false;
-    }
-
-    // S
-    if (glfwGetKey(window, GLFW_KEY_6) == GLFW_PRESS) {
-        if (!key6Pressed) {
-            cube.S();   
-            key6Pressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_6) == GLFW_RELEASE) {
-        key6Pressed = false;
-    }
-    // S'
-    if (glfwGetKey(window, GLFW_KEY_5) == GLFW_PRESS) {
-        if (!key5Pressed) {
-            cube.SPrime();   
-            key5Pressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_5) == GLFW_RELEASE) {
-        key5Pressed = false;
-    }
-
-    // E
-    if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS) {
-        if (!key4Pressed) {
-            cube.E();   
-            key4Pressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_4) == GLFW_RELEASE) {
-        key4Pressed = false;
-    }
-    // E'
-    if (glfwGetKey(window, GLFW_KEY_7) == GLFW_PRESS) {
-        if (!key7Pressed) {
-            cube.EPrime();   
-            key7Pressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_7) == GLFW_RELEASE) {
-        key7Pressed = false;
-    }
-
-    /* Rotate Cube */
-    // Y'
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        if (!keyAPressed) {
-            cube.UPrime();
-            cube.E();
-            cube.D();
-            keyAPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_RELEASE) {
-        keyAPressed = false;
-    }
-    // Y
-    if (glfwGetKey(window, GLFW_KEY_SEMICOLON) == GLFW_PRESS) {
-        if (!keySemicolonPressed) {
-            cube.U();
-            cube.EPrime();
-            cube.DPrime();
-            keySemicolonPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_SEMICOLON) == GLFW_RELEASE) {
-        keySemicolonPressed = false;
-    }
-    // X
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
-        if (!keyTPressed) {
-            cube.LPrime();
-            cube.MPrime();
-            cube.R();
-            keyTPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_RELEASE) {
-        keyTPressed = false;
-    }
-    // X'
-    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) {
-        if (!keyBPressed) {
-            cube.L();
-            cube.M();
-            cube.RPrime();
-            keyBPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_B) == GLFW_RELEASE) {
-        keyBPressed = false;
-    }
-    // Z
-    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
-        if (!keyPPressed) {
-            cube.F();
-            cube.S();
-            cube.BPrime();
-            keyPPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE) {
-        keyPPressed = false;
-    }
-    // Z'
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
-        if (!keyQPressed) {
-            cube.FPrime();
-            cube.SPrime();
-            cube.B();
-            keyQPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_RELEASE) {
-        keyQPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_O, "B'");
 
     /* Wide Moves */
     // Rw
-    if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) {
-        if (!keyUPressed) {
-            cube.R();
-            cube.MPrime();
-            keyUPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_U) == GLFW_RELEASE) {
-        keyUPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_U, "Rw");
     // Rw'
-    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
-        if (!keyMPressed) {
-            cube.RPrime();
-            cube.M();
-            keyMPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_RELEASE) {
-        keyMPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_M, "Rw'");
     // Lw'
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-        if (!keyRPressed) {
-            cube.LPrime();
-            cube.MPrime();
-            keyRPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_RELEASE) {
-        keyRPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_R, "Lw'");
     // Lw
-    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS) {
-        if (!keyVPressed) {
-            cube.L();
-            cube.M();
-            keyVPressed = true; 
-        }
-    }
-    if (glfwGetKey(window, GLFW_KEY_V) == GLFW_RELEASE) {
-        keyVPressed = false;
-    }
+    keyInputMove(window, GLFW_KEY_V, "Lw");
+
+    /* Slice */
+    // M'
+    keyInputMove(window, GLFW_KEY_PERIOD, "M'");
+    keyInputMove(window, GLFW_KEY_X, "M'");
+    // M
+    keyInputMove(window, GLFW_KEY_COMMA, "M");
+    keyInputMove(window, GLFW_KEY_C, "M");
+    // S
+    keyInputMove(window, GLFW_KEY_6, "S");
+    // S'
+    keyInputMove(window, GLFW_KEY_5, "S'");
+    keyInputMove(window, GLFW_KEY_4, "E");
+    keyInputMove(window, GLFW_KEY_7, "E'");
+
+    /* Rotate Cube */
+    // Y'
+    keyInput(window, GLFW_KEY_A, std::bind(&Cube::YPrime, &cube));
+    // Y
+    keyInput(window, GLFW_KEY_SEMICOLON, std::bind(&Cube::Y, &cube));
+    // X
+    keyInput(window, GLFW_KEY_T, std::bind(&Cube::X, &cube));
+    keyInput(window, GLFW_KEY_Y, std::bind(&Cube::X, &cube));
+    // X'
+    keyInput(window, GLFW_KEY_B, std::bind(&Cube::XPrime, &cube));
+    keyInput(window, GLFW_KEY_N, std::bind(&Cube::XPrime, &cube));
+    // Z
+    keyInput(window, GLFW_KEY_P, std::bind(&Cube::Z, &cube));
+    // Z'
+    keyInput(window, GLFW_KEY_Q, std::bind(&Cube::ZPrime, &cube));
 }
