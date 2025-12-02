@@ -65,6 +65,8 @@
         "deque": "cpp",
         "queue": "cpp",
         "random": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "fstream": "cpp",
+        "sstream": "cpp"
     }
 }

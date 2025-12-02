@@ -2,7 +2,43 @@
 Cube Project
 David Chau
 Comp Sci 3 Period 6
-This app allows you to scramble and solve a Rubik's cube and see your time.
+This app allows you to scramble and solve a Rubik's cube and see your time and move count.
+*/
+
+/*
+CONTROLS
+I - right face up
+K - right face down
+E - left face up
+D - left face down
+J - top face clockwise
+F - top face counterclockwise
+H - front face clockwise
+G - front face counterclockwise
+S - bottom face clockwise
+L - bottom face counterclockwise
+W - back face clockwise
+O - back face counterclockwise
+
+U - right and middle face up
+M - right and middle face down
+R - left and middle face up
+V - left and middle face down
+
+. or X - middle face up
+, or C - middle face down
+6 - standing layer clockwise (same direction as front)
+5 - standing layer counterclockwise
+4 - equatorial layer clockwise (same direction as bottom face)
+7 - equatorial layer counterclockwise
+
+A - counterclockwise rotation on Y axis (same direction as top face)
+; - clockwise rotation on Y axis
+T or Y - clockwise rotation on X axis (same direction as right face)
+B or N - counterclockwise rotation on X axis
+P - clockwise rotation on Z axis (same direction as front face)
+Q - counterclockwise on Z axis
+
 */
 
 #include <iostream>
@@ -19,6 +55,10 @@ This app allows you to scramble and solve a Rubik's cube and see your time.
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include "Shader.h"
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
+#include <cmath>
 
 using namespace std; 
 
@@ -26,6 +66,10 @@ const float width = 1500.0f;
 const float height = 1000.0f;
 
 const double PI = 3.14159265358979323846;
+
+const double turnSpeed = 10.0;
+const double turnTime = 1.0 / turnSpeed;
+
 
 const vector<glm::vec3> faceRotations = {
     glm::vec3(-90, 0, 0),
@@ -75,6 +119,7 @@ std::map<string, std::function<void()>> possibleMoves;
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount);
 void updateCam(float radians);
 void processInput(GLFWwindow *window);
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 
 class Facelet {
     public:
@@ -82,15 +127,22 @@ class Facelet {
     size_t vertexCount;
     glm::vec4 color;
 
+    private:
+    glm::vec3 previousRotation;
+    glm::vec3 desiredRotation;
+    float lastMoveTime;
+
+    public:
     Facelet(glm::vec4 color) {
         this->color = color;
 
-        std::vector<float> vertices = draw();
+        std::vector<float> vertices = getVertices();
         vertexCount = vertices.size();
         createVBOVAO(VAO, VBO, vertices.data(), vertexCount);
     }
 
-    std::vector<float> draw() {
+    private:
+    std::vector<float> getVertices() {
         std::vector<float> vertices = {
             0.5f,  0.5f, 0.0f,
             0.5f, -0.5f, 0.0f,
@@ -102,12 +154,31 @@ class Facelet {
         return vertices;
     }
 
+    public:
     glm::vec3 getPosition(int faceIndex, int faceletIndex) {
         glm::vec2 offset = faceletOffsets[faceletIndex];
         return glm::vec3(offset.x, offset.y, 1.6f);
     }
     glm::vec3 getRotation(int faceIndex) {
-        return faceRotations[faceIndex];
+        glm::vec3 rotation = faceRotations[faceIndex];
+
+        // SMOOTH ROTATION
+        // requires knowing the shortest rotation between two points
+
+        // if (rotation != desiredRotation) {
+        //     previousRotation = desiredRotation;
+        //     desiredRotation = rotation;
+        //     lastMoveTime = time;
+        // }
+        // double interpolation = std::min((time - lastMoveTime) / turnTime, 1);
+        // 
+        //
+        // glm::vec3 currentRotation = glm::vec3(
+        //     std::lerp(),
+        //     std::lerp(),
+        //     std::lerp()
+        // );
+        return rotation;
     }
 };
 
@@ -339,10 +410,6 @@ enum Mode {
     Solve
 };
 
-enum TutorialPage {
-
-};
-
 /* 2D Classes */
 
 class Rectangle {
@@ -351,10 +418,12 @@ class Rectangle {
     size_t vertexCount;
     glm::vec2 position;
     glm::vec2 size;
+    glm::vec4 color;
 
-    Rectangle(glm::vec2 position, glm::vec2 size) {
+    Rectangle(glm::vec2 position, glm::vec2 size, glm::vec4 color) {
         this->position = position;
         this->size = size;
+        this->color = color;
 
         std::vector<float> vertices = getVertices();
         vertexCount = vertices.size();
@@ -375,11 +444,40 @@ class Rectangle {
         };
         return vertices;
     }
+
+    public:
+    void draw(GLint& modelLoc, GLint& colorLoc) {
+        // set model
+        glm::mat4 model = glm::mat4(1.0f);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+        // set color
+        glUniform4f(colorLoc, color.r, color.g, color.b, color.a);
+
+        // set vertices
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, vertexCount / 3);
+    }
 };
 
-// text
-// FTbrary ft;
-// FT_Face face;_Li
+class Button: public Rectangle {
+    public:
+    std::function<void()> action;
+
+    Button(glm::vec2 position, glm::vec2 size, glm::vec4 color, std::function<void()> action) 
+    : Rectangle(position, size, color) {
+        this->action = action;
+    }
+
+    bool mouseIsHover(double x, double y) {
+        y = height - y; // 2D graphics have y flipped (y = 0 at bottom instead of top)
+        return x > position.x && x < position.x + size.x && y > position.y && y < position.y + size.y;
+    }
+
+    void runAction() {
+        action();
+    }
+};
 
 struct Character {
     unsigned int textureID;
@@ -510,6 +608,8 @@ class TextRenderer {
 
 Cube cube;
 
+Mode currentMode = Mode::Title;
+
 glm::mat4 view;
 glm::mat4 projection;
 
@@ -517,6 +617,16 @@ bool cubeIsSolved = true;
 float solveStartTime = 0;
 
 vector<pair<string, float>> performedMoves;
+
+struct SolveResult {
+    float time; // seconds
+    unsigned int moveCount;
+};
+
+std::vector<SolveResult> solves;
+
+vector<Button> titleButtons;
+vector<Button> solveButtons;
 
 int main() {
     GLFWwindow* window;
@@ -576,39 +686,79 @@ int main() {
         "C:/Users/dchau/Documents/CS3/Project/src/shaders/textVertex.txt", 
         "C:/Users/dchau/Documents/CS3/Project/src/shaders/textFragment.txt");
 
+
     // Set background color
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
 
+    // Get locs
     GLint modelLoc = glGetUniformLocation(shader.program, "model");
     GLint colorLoc = glGetUniformLocation(shader.program, "fillColor");
     GLint viewLoc = glGetUniformLocation(shader.program, "view");
     GLint projectionLoc = glGetUniformLocation(shader.program, "projection");
 
-    // reset facelets
-    Rectangle top(glm::vec2(0, height - 50), glm::vec2(width, 50));
 
-    // text
+    /* Initialize graphics */
+
+    // Title
+    Rectangle titleBackground(glm::vec2(0, 0), glm::vec2(width, height), glm::vec4(0.25f, 0.25f, 0.25f, 0.4f));
+
+    Button solveModeButton(glm::vec2(50.0f, height - 250.0f), glm::vec2(400, 100), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), []() {
+        currentMode = Mode::Solve;
+    });
+    Button tutorialModeButton(glm::vec2(50.0f, height - 400.0f), glm::vec2(400, 100), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), []() {
+        // currentMode = Mode::Tutorial;
+    });
+    titleButtons.push_back(solveModeButton);
+    titleButtons.push_back(tutorialModeButton);
+    
+    // Solve
+    Rectangle topBar(glm::vec2(0, height - 55), glm::vec2(width, 55), glm::vec4(0.25f, 0.25f, 0.25f, 1.0f));
+    Button backToTitleButton(glm::vec2(0.0f, height - 55.0f), glm::vec2(55.0f, 55.0f), glm::vec4(0.0f, 1.0f, 1.0f, 1.0f), []() {
+        currentMode = Mode::Title;
+    });
+    solveButtons.push_back(backToTitleButton);
+
+
+    // Initialize text renderer
     TextRenderer textRenderer;
-    textRenderer.loadFont("C:/Users/dchau/Documents/CS3/Project/assets/fonts/arial.ttf", 40);
+    textRenderer.loadFont("C:/Users/dchau/Documents/CS3/Project/assets/fonts/LATO-BOLD.TTF", 100);
+
+
+    // Main loop
 
     while (!glfwWindowShouldClose(window)) {
         float timeValue = glfwGetTime();
 
         processInput(window);
+        glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
+        // mouseButtonCallback(window);
+
+        // Handle solving
         if (cubeIsSolved && !cube.isSolved() && performedMoves.size() == 1) {
             cout << "START!" << endl;
             solveStartTime = timeValue;
             cubeIsSolved = false;
         }
         if (!cubeIsSolved && cube.isSolved()) {
-            cout << "YAY! Solved in " << timeValue - solveStartTime << endl;
             cubeIsSolved = true;
-            cout << "Moves: " << performedMoves.size() << endl;
+
+            float time = timeValue - solveStartTime;
+            cout << "YAY! Solved in " << timeValue - solveStartTime << endl;
+
+            unsigned int moveCount = performedMoves.size();
+            cout << "Moves: " << moveCount << endl;
+
+            cout << "Moves per Sec: " << moveCount / time << endl;
+
+            SolveResult solve;
+            solve.time = time;
+            solve.moveCount = moveCount;
+            solves.push_back(solve);
+
             performedMoves.clear();
-        }
-        
+        } 
 
         // clear color buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -653,6 +803,9 @@ int main() {
 
         /* 2D */
 
+
+        // Set up shader
+
         glDisable(GL_DEPTH_TEST);
 
         glViewport(0, 0, width, height);
@@ -663,15 +816,25 @@ int main() {
         glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
 
-        // do for each 2d element
-        glm::mat4 model = glm::mat4(1.0f);
-        glUniform4f(colorLoc, 0.25f, 0.25f, 0.25f, 1.0f);
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        // Draw 2D graphics
 
-        glBindVertexArray(top.VAO);
-        glDrawArrays(GL_TRIANGLES, 0, top.vertexCount / 3);
+        switch (currentMode) {
+            case Title:
+                titleBackground.draw(modelLoc, colorLoc);
+                solveModeButton.draw(modelLoc, colorLoc);
+                tutorialModeButton.draw(modelLoc, colorLoc);
+                break;
 
-        // text 
+            case Tutorial:
+                break;
+
+            case Solve:
+                topBar.draw(modelLoc, colorLoc);
+                backToTitleButton.draw(modelLoc, colorLoc);
+        }
+
+        // Draw 2D text
+
         textShader.use();
 
         glUniformMatrix4fv(
@@ -680,15 +843,73 @@ int main() {
             GL_FALSE, 
             glm::value_ptr(projection));
 
-        textRenderer.renderText(textShader, "Solve", 0.0f, height - 48, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        switch (currentMode) {
+            case Title:
+                textRenderer.renderText(textShader, 
+                    "Welcome to the Cube App", 
+                    15.0f, 
+                    height - 75.0f, 
+                    0.75f, 
+                    glm::vec3(1.0f, 0.0f, 1.0f));
 
-        if (!cubeIsSolved) {
-            // display time as text
-            textRenderer.renderText(
-                textShader,
-                std::to_string(timeValue - solveStartTime), 
-                0.0f, 0.0f, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+                textRenderer.renderText(textShader, 
+                    "Solve", 
+                    solveModeButton.position.x + 10.0f, 
+                    solveModeButton.position.y + 10.0f, 
+                    0.75f, 
+                    glm::vec3(0.0f, 0.0f, 0.0f));
+
+                textRenderer.renderText(textShader, 
+                    "Tutorial", 
+                    tutorialModeButton.position.x + 10.0f, 
+                    tutorialModeButton.position.y + 10.0f, 
+                    0.75f, 
+                    glm::vec3(0.0f, 0.0f, 0.0f));
+
+                break;
+
+            case Tutorial:
+                break;
+
+            case Solve:
+                textRenderer.renderText(textShader, "<", 7.0f, height - 55.0f, 0.75f, glm::vec3(0.0f, 0.0f, 0.0f));
+
+                textRenderer.renderText(textShader, "Solve Mode", 65.0f, height - 45.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+                if (!cubeIsSolved) {
+                    
+                    // display time as text
+                    float roundedTime = std::round((timeValue - solveStartTime) * 1000.0f) / 1000.0f;
+                    std::stringstream stream;
+                    stream << std::fixed << std::setprecision(3) << roundedTime;
+                    string solveTime = stream.str();
+
+                    textRenderer.renderText(
+                        textShader,
+                        solveTime, 
+                        5.0f, 5.0f, 0.75f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+                    // display move count
+                    textRenderer.renderText(
+                        textShader,
+                        "Move Count: " + std::to_string(performedMoves.size()), 
+                        width * 0.3f, 5.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                } else {
+                    textRenderer.renderText(
+                        textShader,
+                        "Press space to scramble", 
+                        5.0f, 55.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+                    textRenderer.renderText(
+                        textShader,
+                        "Perform any move (excluding cube rotation) to start the timer", 
+                        5.0f, 5.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+                }
+
+                break;
         }
+
+
 
         // swap buffers and poll events
         glfwSwapBuffers(window);
@@ -774,8 +995,7 @@ void processInput(GLFWwindow *window) {
         glfwSetWindowShouldClose(window, true);
     } 
 
-    keyInput(window, GLFW_KEY_1, std::bind(&Cube::scramble, &cube));
-    keyInput(window, GLFW_KEY_2, std::bind(&Cube::printSolved, &cube));
+    keyInput(window, GLFW_KEY_SPACE, std::bind(&Cube::scramble, &cube));
 
     /* Move Face */
     // R
@@ -842,4 +1062,26 @@ void processInput(GLFWwindow *window) {
     keyInput(window, GLFW_KEY_P, std::bind(&Cube::Z, &cube));
     // Z'
     keyInput(window, GLFW_KEY_Q, std::bind(&Cube::ZPrime, &cube));
+}
+
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    if (action == GLFW_PRESS) {
+        double xPos, yPos;
+        glfwGetCursorPos(window, &xPos, &yPos);
+
+        switch (currentMode) {
+            case Title:
+                for (Button button : titleButtons) {
+                    if (button.mouseIsHover(xPos, yPos)) {
+                        button.runAction();
+                    }
+                }
+            case Solve:
+                for (Button button : solveButtons) {
+                    if (button.mouseIsHover(xPos, yPos)) {
+                        button.runAction();
+                    }
+                }
+        }
+    }
 }
