@@ -1,7 +1,13 @@
 # Cube Project
 This is an app to help you improve your cubing skills by playing with a virtual cube.
-## Progress
-- This is mostly unfinished.
+## Setup
+Install MinGW-w64 (Step 2 on https://medium.com/@bhargav.chippada/how-to-setup-opengl-on-mingw-w64-in-windows-10-64-bits-b77f350cea7e)
+## Goals
+- Improve solve mode (add smooth turns instead of instanteous)
+- Show stats (maybe part of solve mode)
+- Work on tutorial mode
+- Work on learn mode
+- Work on practice mode
 ## Features
 ### Solve Mode
 - You can scramble the cube by pressing space.
