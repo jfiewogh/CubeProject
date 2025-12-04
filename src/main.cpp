@@ -130,6 +130,12 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
 
 void performMove(string moveLetter);
 
+// Each face has 9 facelets
+// The indices are
+// 0 1 2
+// 3 4 5
+// 6 7 8
+
 class Facelet {
     public:
     GLuint VAO, VBO;
@@ -176,33 +182,6 @@ class Facelet {
         this->faceIndex = faceIndex;
         return faceRotations[faceIndex];
     }
-
-    // SMOOTH ROTATION
-    // currently unused
-    glm::vec3 getSmoothRotation(int faceIndex, float time) {
-        cout << this->faceIndex << " " << faceIndex << endl;
-        this->faceIndex = faceIndex;
-
-        glm::vec3 rotation = getRotation(faceIndex);
-
-        if (rotation != desiredRotation) {
-            previousRotation = desiredRotation;
-            desiredRotation = rotation;
-            lastMoveTime = time;
-        }
-        double interpolation = std::min((time - lastMoveTime) / turnTime, 1.0);
-        // cout << interpolation << endl;
-
-        // requires knowing the shortest rotation between two points
-        // 
-        //
-        // glm::vec3 currentRotation = glm::vec3(
-        //     std::lerp(),
-        //     std::lerp(),
-        //     std::lerp()
-        // );
-        return rotation;
-    }
 };
 
 class Cube {
@@ -230,10 +209,10 @@ class Cube {
     // previous is assigned to next 
     void swapFour(int r1, int c1, int r2, int c2, int r3, int c3, int r4, int c4) {
         Facelet* first = &facelets[r1][c1];
+        Facelet temp = *first;
         Facelet* second = &facelets[r2][c2];
         Facelet* third = &facelets[r3][c3];
         Facelet* fourth = &facelets[r4][c4];
-        Facelet temp = *first;
         facelets[r1][c1] = *second;
         facelets[r2][c2] = *third;
         facelets[r3][c3] = *fourth;
@@ -521,6 +500,7 @@ class TextRenderer {
     public:
     unsigned int VAO, VBO;
 
+    // initialize the VAO and VBO
     TextRenderer() {
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
@@ -533,6 +513,7 @@ class TextRenderer {
         glBindVertexArray(0);  
     }
 
+    // load the font from the file 
     void loadFont(const char* filePath, int fontSize) {
         FT_Library fontLibrary;
         if (FT_Init_FreeType(&fontLibrary)) {
@@ -590,6 +571,7 @@ class TextRenderer {
         FT_Done_FreeType(fontLibrary);
     }
 
+    // display the text
     void renderText(Shader &shader, string text, float x, float y, float scale, glm::vec3 color) {
         glUniform3f(
             glGetUniformLocation(shader.program, "textColor"), 
@@ -635,6 +617,13 @@ class TextRenderer {
     }
 };
 
+struct SolveResult {
+    float time; // seconds
+    unsigned int moveCount;
+};
+
+// Other global instances
+
 Cube cube;
 
 Mode currentMode = Mode::Title;
@@ -642,21 +631,21 @@ Mode currentMode = Mode::Title;
 glm::mat4 view;
 glm::mat4 projection;
 
+// solve status
 bool cubeIsSolved = true;
 float solveStartTime = 0;
 
+// moves
 vector<pair<string, float>> performedMoves;
 
-struct SolveResult {
-    float time; // seconds
-    unsigned int moveCount;
-};
-
+// solves
 std::vector<SolveResult> solves;
 
+// buttons
 vector<Button> titleButtons;
 vector<Button> solveButtons;
 
+// Runs when you start it
 int main() {
     GLFWwindow* window;
     if (!glfwInit()) {
@@ -673,6 +662,7 @@ int main() {
 
     // Create cube
 
+    // connect functions to each move
     possibleMoves = {
         {"R", std::bind(&Cube::R, &cube)},
         {"R'", std::bind(&Cube::RPrime, &cube)},
@@ -698,6 +688,7 @@ int main() {
         {"Lw'", std::bind(&Cube::LwPrime, &cube)}
     };
 
+    // connect functions to each rotation
     possibleRotations = {
         {"Y'", std::bind(&Cube::YPrime, &cube)},
         {"Y", std::bind(&Cube::Y, &cube)},
@@ -707,6 +698,7 @@ int main() {
         {"Z'", std::bind(&Cube::ZPrime, &cube)}
     };
 
+    // connect key to the move
     keyMoves = {
         // Face
         {GLFW_KEY_I, "R"},
@@ -737,6 +729,7 @@ int main() {
         {GLFW_KEY_7, "E'"},
     };
 
+    // connect key to the rotation
     keyRotations = {
         // Rotations
         {GLFW_KEY_A, "Y'"},
@@ -749,6 +742,7 @@ int main() {
         {GLFW_KEY_Q, "Z'"}
     };
 
+    // resets the cube to starting position
     cube.initializeFacelets();
     
 
@@ -771,7 +765,7 @@ int main() {
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
 
-    // Get locs
+    // Get uniform locations
     GLint modelLoc = glGetUniformLocation(shader.program, "model");
     GLint colorLoc = glGetUniformLocation(shader.program, "fillColor");
     GLint viewLoc = glGetUniformLocation(shader.program, "view");
@@ -788,7 +782,6 @@ int main() {
     });
     Button tutorialModeButton(glm::vec2(50.0f, height - 400.0f), glm::vec2(400, 100), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), []() {
         cout << "no tutorial mode" << endl;
-        // currentMode = Mode::Tutorial;
     });
     titleButtons.push_back(solveModeButton);
     titleButtons.push_back(tutorialModeButton);
@@ -811,7 +804,7 @@ int main() {
     Facelet marker = cube.facelets[0][0];
 
     while (!glfwWindowShouldClose(window)) {
-        float timeValue = glfwGetTime();
+        float timeValue = glfwGetTime(); // value in seconds
 
         glfwSetKeyCallback(window, keyCallback);
         glfwSetMouseButtonCallback(window, mouseButtonCallback);
@@ -841,11 +834,13 @@ int main() {
             performedMoves.clear();
         } 
 
-        // clear color buffer
+        // Clear color buffer
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // activate shader
+        // Activate shader
         shader.use();
+
+
 
         /* 3D */
 
@@ -868,20 +863,14 @@ int main() {
             for (int fl = 0; fl < cube.facelets[0].size(); fl++) {
                 Facelet* pointer = &cube.facelets[f][fl];
                 Facelet facelet = *pointer;
+
+                glm::vec3 rotation = facelet.getRotation(f);
                 
                 glm::mat4 model = glm::mat4(1.0f);
-                
-                glm::vec3 rotation;
-                // if (pointer == &marker) {
-                //     rotation = facelet.getSmoothRotation(f, timeValue);
-                // } else {
-                    rotation = facelet.getRotation(f);
-                // }
-
+                // Rotation
                 model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
                 model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
                 model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-
                 // Translation
                 model = glm::translate(model, facelet.getPosition(f, fl));
 
@@ -898,7 +887,6 @@ int main() {
         cout << marker.faceIndex << endl;
 
         /* 2D */
-
 
         // Set up shader
 
@@ -931,7 +919,7 @@ int main() {
 
         // Draw 2D text
 
-        textShader.use();
+        textShader.use(); // use text shader
 
         glUniformMatrix4fv(
             glGetUniformLocation(textShader.program, "projection"), 
@@ -1019,6 +1007,7 @@ int main() {
     return 0;
 }
 
+// Create vertex array and buffer with vertices
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount) {
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -1070,6 +1059,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     }
 }
 
+// Handle mouse inputs
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (action == GLFW_PRESS) {
         double xPos, yPos;
