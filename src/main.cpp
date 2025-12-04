@@ -808,7 +808,7 @@ int main() {
 
     // Main loop
 
-    // Facelet marker = cube.facelets[0][0];
+    Facelet marker = cube.facelets[0][0];
 
     while (!glfwWindowShouldClose(window)) {
         float timeValue = glfwGetTime();
@@ -895,7 +895,7 @@ int main() {
             }
         }
 
-        // cout << marker.faceIndex << endl;
+        cout << marker.faceIndex << endl;
 
         /* 2D */
 
@@ -1057,10 +1057,13 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         // Escape button closes window
         if (key == GLFW_KEY_ESCAPE) {
             cube.resetFacelets();
+        // Space scrambles the cube
         } else if (key == GLFW_KEY_SPACE) {
             cube.scramble();
+        // Perform move
         } else if (keyMoves.find(key) != keyMoves.end()) {
             performMove(keyMoves.at(key));
+        // Perform rotation
         } else if (keyRotations.find(key) != keyRotations.end()) {
             possibleRotations.at(keyRotations.at(key))();
         }
