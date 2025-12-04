@@ -70,6 +70,8 @@ const double PI = 3.14159265358979323846;
 const double turnSpeed = 10.0;
 const double turnTime = 1.0 / turnSpeed;
 
+const double cubeViewAngle = PI / 3;
+
 
 const vector<glm::vec3> faceRotations = {
     glm::vec3(-90, 0, 0),
@@ -114,12 +116,19 @@ glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 1.0f);
 glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
+
 std::map<string, std::function<void()>> possibleMoves;
+std::map<string, std::function<void()>> possibleRotations;
+
+std::map<int, string> keyMoves;
+std::map<int, string> keyRotations;
 
 void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertexCount);
-void updateCam(float radians);
-void processInput(GLFWwindow *window);
+void updateCam(float radians, float viewAngle);
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+
+void performMove(string moveLetter);
 
 class Facelet {
     public:
@@ -131,6 +140,10 @@ class Facelet {
     glm::vec3 previousRotation;
     glm::vec3 desiredRotation;
     float lastMoveTime;
+
+    public:
+    int faceIndex;
+    int faceletIndex;
 
     public:
     Facelet(glm::vec4 color) {
@@ -160,17 +173,27 @@ class Facelet {
         return glm::vec3(offset.x, offset.y, 1.6f);
     }
     glm::vec3 getRotation(int faceIndex) {
-        glm::vec3 rotation = faceRotations[faceIndex];
+        this->faceIndex = faceIndex;
+        return faceRotations[faceIndex];
+    }
 
-        // SMOOTH ROTATION
+    // SMOOTH ROTATION
+    // currently unused
+    glm::vec3 getSmoothRotation(int faceIndex, float time) {
+        cout << this->faceIndex << " " << faceIndex << endl;
+        this->faceIndex = faceIndex;
+
+        glm::vec3 rotation = getRotation(faceIndex);
+
+        if (rotation != desiredRotation) {
+            previousRotation = desiredRotation;
+            desiredRotation = rotation;
+            lastMoveTime = time;
+        }
+        double interpolation = std::min((time - lastMoveTime) / turnTime, 1.0);
+        // cout << interpolation << endl;
+
         // requires knowing the shortest rotation between two points
-
-        // if (rotation != desiredRotation) {
-        //     previousRotation = desiredRotation;
-        //     desiredRotation = rotation;
-        //     lastMoveTime = time;
-        // }
-        // double interpolation = std::min((time - lastMoveTime) / turnTime, 1);
         // 
         //
         // glm::vec3 currentRotation = glm::vec3(
@@ -190,7 +213,9 @@ class Cube {
         for (int f = 0; f < 6; f++) {
             vector<Facelet> face;
             for (int fl = 0; fl < 9; fl++) {
-                face.push_back(Facelet(faceColors[f]));
+                Facelet facelet = Facelet(faceColors[f]);
+                facelet.faceIndex = f;
+                face.push_back(facelet);
             }
             facelets.push_back(face);
         }
@@ -204,10 +229,14 @@ class Cube {
     private:
     // previous is assigned to next 
     void swapFour(int r1, int c1, int r2, int c2, int r3, int c3, int r4, int c4) {
-        Facelet temp = facelets[r1][c1];
-        facelets[r1][c1] = facelets[r2][c2];
-        facelets[r2][c2] = facelets[r3][c3];
-        facelets[r3][c3] = facelets[r4][c4];
+        Facelet* first = &facelets[r1][c1];
+        Facelet* second = &facelets[r2][c2];
+        Facelet* third = &facelets[r3][c3];
+        Facelet* fourth = &facelets[r4][c4];
+        Facelet temp = *first;
+        facelets[r1][c1] = *second;
+        facelets[r2][c2] = *third;
+        facelets[r3][c3] = *fourth;
         facelets[r4][c4] = temp;
     }
 
@@ -666,7 +695,58 @@ int main() {
         {"Rw", std::bind(&Cube::Rw, &cube)}, 
         {"Rw'", std::bind(&Cube::RwPrime, &cube)}, 
         {"Lw", std::bind(&Cube::Lw, &cube)}, 
-        {"Lw'", std::bind(&Cube::LwPrime, &cube)}, 
+        {"Lw'", std::bind(&Cube::LwPrime, &cube)}
+    };
+
+    possibleRotations = {
+        {"Y'", std::bind(&Cube::YPrime, &cube)},
+        {"Y", std::bind(&Cube::Y, &cube)},
+        {"X", std::bind(&Cube::X, &cube)},
+        {"X'", std::bind(&Cube::XPrime, &cube)},
+        {"Z", std::bind(&Cube::Z, &cube)},
+        {"Z'", std::bind(&Cube::ZPrime, &cube)}
+    };
+
+    keyMoves = {
+        // Face
+        {GLFW_KEY_I, "R"},
+        {GLFW_KEY_K, "R'"},
+        {GLFW_KEY_D, "L"},
+        {GLFW_KEY_E, "L'"},
+        {GLFW_KEY_J, "U"},
+        {GLFW_KEY_F, "U'"},
+        {GLFW_KEY_H, "F"},
+        {GLFW_KEY_G, "F'"},
+        {GLFW_KEY_S, "D"},
+        {GLFW_KEY_L, "D'"},
+        {GLFW_KEY_W, "B"},
+        {GLFW_KEY_O, "B'"},
+        // Wide
+        {GLFW_KEY_U, "Rw"},
+        {GLFW_KEY_M, "Rw'"},
+        {GLFW_KEY_R, "Lw'"},
+        {GLFW_KEY_V, "Lw"},
+        // Slice
+        {GLFW_KEY_PERIOD, "M'"},
+        {GLFW_KEY_X, "M'"},
+        {GLFW_KEY_COMMA, "M"},
+        {GLFW_KEY_C, "M"},
+        {GLFW_KEY_6, "S"},
+        {GLFW_KEY_5, "S'"},
+        {GLFW_KEY_4, "E"},
+        {GLFW_KEY_7, "E'"},
+    };
+
+    keyRotations = {
+        // Rotations
+        {GLFW_KEY_A, "Y'"},
+        {GLFW_KEY_SEMICOLON, "Y"},
+        {GLFW_KEY_T, "X"},
+        {GLFW_KEY_Y, "X"},
+        {GLFW_KEY_B, "X'"},
+        {GLFW_KEY_N, "X'"},
+        {GLFW_KEY_P, "Z"},
+        {GLFW_KEY_Q, "Z'"}
     };
 
     cube.initializeFacelets();
@@ -707,6 +787,7 @@ int main() {
         currentMode = Mode::Solve;
     });
     Button tutorialModeButton(glm::vec2(50.0f, height - 400.0f), glm::vec2(400, 100), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f), []() {
+        cout << "no tutorial mode" << endl;
         // currentMode = Mode::Tutorial;
     });
     titleButtons.push_back(solveModeButton);
@@ -727,13 +808,13 @@ int main() {
 
     // Main loop
 
+    // Facelet marker = cube.facelets[0][0];
+
     while (!glfwWindowShouldClose(window)) {
         float timeValue = glfwGetTime();
 
-        processInput(window);
+        glfwSetKeyCallback(window, keyCallback);
         glfwSetMouseButtonCallback(window, mouseButtonCallback);
-
-        // mouseButtonCallback(window);
 
         // Handle solving
         if (cubeIsSolved && !cube.isSolved() && performedMoves.size() == 1) {
@@ -745,7 +826,7 @@ int main() {
             cubeIsSolved = true;
 
             float time = timeValue - solveStartTime;
-            cout << "YAY! Solved in " << timeValue - solveStartTime << endl;
+            cout << "Yay! Solved in " << timeValue - solveStartTime << endl;
 
             unsigned int moveCount = performedMoves.size();
             cout << "Moves: " << moveCount << endl;
@@ -770,7 +851,13 @@ int main() {
 
         glEnable(GL_DEPTH_TEST);
 
-        updateCam(PI / 2);
+        
+        if (currentMode == Mode::Title) {
+            // cool
+            updateCam(timeValue, timeValue);
+        } else {
+            updateCam(PI / 2, cubeViewAngle);
+        }
 
         // update uniform matrix
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
@@ -779,11 +866,18 @@ int main() {
 
         for (int f = 0; f < cube.facelets.size(); f++) {
             for (int fl = 0; fl < cube.facelets[0].size(); fl++) {
-                Facelet facelet = cube.facelets[f][fl];
+                Facelet* pointer = &cube.facelets[f][fl];
+                Facelet facelet = *pointer;
                 
                 glm::mat4 model = glm::mat4(1.0f);
                 
-                glm::vec3 rotation = facelet.getRotation(f);
+                glm::vec3 rotation;
+                // if (pointer == &marker) {
+                //     rotation = facelet.getSmoothRotation(f, timeValue);
+                // } else {
+                    rotation = facelet.getRotation(f);
+                // }
+
                 model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
                 model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
                 model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -800,6 +894,8 @@ int main() {
                 glDrawArrays(GL_TRIANGLES, 0, facelet.vertexCount / 3);
             }
         }
+
+        // cout << marker.faceIndex << endl;
 
         /* 2D */
 
@@ -846,7 +942,7 @@ int main() {
         switch (currentMode) {
             case Title:
                 textRenderer.renderText(textShader, 
-                    "Welcome to the Cube App", 
+                    "Welcome to the Cubing App", 
                     15.0f, 
                     height - 75.0f, 
                     0.75f, 
@@ -897,6 +993,11 @@ int main() {
                 } else {
                     textRenderer.renderText(
                         textShader,
+                        "Press esc to reset the cube", 
+                        5.0f, 105.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+                    textRenderer.renderText(
+                        textShader,
                         "Press space to scramble", 
                         5.0f, 55.0f, 0.5f, glm::vec3(1.0f, 1.0f, 1.0f));
 
@@ -908,8 +1009,6 @@ int main() {
 
                 break;
         }
-
-
 
         // swap buffers and poll events
         glfwSwapBuffers(window);
@@ -934,35 +1033,16 @@ void createVBOVAO(GLuint& VAO, GLuint& VBO, const float* vertices, size_t vertex
 }
 
 // for 3D
-void updateCam(float yRad) {
+void updateCam(float yRad, float viewAngle) {
     const float radius = 7.0f;
 
     cameraPos.x = cos(yRad) * radius;
-    cameraPos.y = sin(PI / 3) * radius;
+    cameraPos.y = sin(viewAngle) * radius;
     cameraPos.z = sin(yRad) * radius;
 
     view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
 
     projection = glm::perspective(glm::radians(45.0f), width / height, 0.1f, 100.0f);
-}
-
-std::map<int, bool> keys;
-
-// Use when you want to bind a key to a certain action
-void keyInput(GLFWwindow *window, int key, std::function<void()> action) {
-    // Add key to map if not there
-    if (keys.find(key) == keys.end()) {
-        keys[key] = false;
-    }
-    // When pressed, perform action (holding down does not repeat action)
-    if (glfwGetKey(window, key) == GLFW_PRESS) {
-        if (!keys[key]) {
-            action();
-            keys[key] = true;
-        }
-    } else if (glfwGetKey(window, key) == GLFW_RELEASE) {
-        keys[key] = false;
-    }
 }
 
 // Performs and records the move
@@ -971,97 +1051,20 @@ void performMove(string moveLetter) {
     performedMoves.push_back(pair<string, float> {moveLetter, glfwGetTime()});
 }
 
-// Use when you want to bind a key to a certain move
-void keyInputMove(GLFWwindow *window, int key, string moveLetter) {
-    // Add key to map if not there
-    if (keys.find(key) == keys.end()) {
-        keys[key] = false;
-    }
-    // When pressed, perform action (holding down does not repeat action)
-    if (glfwGetKey(window, key) == GLFW_PRESS) {
-        if (!keys[key]) {
-            performMove(moveLetter);
-            keys[key] = true;
-        }
-    } else if (glfwGetKey(window, key) == GLFW_RELEASE) {
-        keys[key] = false;
-    }
-}
-
 // Handles key inputs
-void processInput(GLFWwindow *window) {
-    // Escape button closes window
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, true);
-    } 
-
-    keyInput(window, GLFW_KEY_SPACE, std::bind(&Cube::scramble, &cube));
-
-    /* Move Face */
-    // R
-    keyInputMove(window, GLFW_KEY_I, "R");
-    // R'
-    keyInputMove(window, GLFW_KEY_K, "R'");
-    // L
-    keyInputMove(window, GLFW_KEY_D, "L");
-    // L'
-    keyInputMove(window, GLFW_KEY_E, "L'");
-    // U
-    keyInputMove(window, GLFW_KEY_J, "U");
-    // U'
-    keyInputMove(window, GLFW_KEY_F, "U'");
-    // F
-    keyInputMove(window, GLFW_KEY_H, "F");
-    // F'
-    keyInputMove(window, GLFW_KEY_G, "F'");
-    // D
-    keyInputMove(window, GLFW_KEY_S, "D");
-    // D'
-    keyInputMove(window, GLFW_KEY_L, "D'");
-    // B
-    keyInputMove(window, GLFW_KEY_W, "B");
-    // B'
-    keyInputMove(window, GLFW_KEY_O, "B'");
-
-    /* Wide Moves */
-    // Rw
-    keyInputMove(window, GLFW_KEY_U, "Rw");
-    // Rw'
-    keyInputMove(window, GLFW_KEY_M, "Rw'");
-    // Lw'
-    keyInputMove(window, GLFW_KEY_R, "Lw'");
-    // Lw
-    keyInputMove(window, GLFW_KEY_V, "Lw");
-
-    /* Slice */
-    // M'
-    keyInputMove(window, GLFW_KEY_PERIOD, "M'");
-    keyInputMove(window, GLFW_KEY_X, "M'");
-    // M
-    keyInputMove(window, GLFW_KEY_COMMA, "M");
-    keyInputMove(window, GLFW_KEY_C, "M");
-    // S
-    keyInputMove(window, GLFW_KEY_6, "S");
-    // S'
-    keyInputMove(window, GLFW_KEY_5, "S'");
-    keyInputMove(window, GLFW_KEY_4, "E");
-    keyInputMove(window, GLFW_KEY_7, "E'");
-
-    /* Rotate Cube */
-    // Y'
-    keyInput(window, GLFW_KEY_A, std::bind(&Cube::YPrime, &cube));
-    // Y
-    keyInput(window, GLFW_KEY_SEMICOLON, std::bind(&Cube::Y, &cube));
-    // X
-    keyInput(window, GLFW_KEY_T, std::bind(&Cube::X, &cube));
-    keyInput(window, GLFW_KEY_Y, std::bind(&Cube::X, &cube));
-    // X'
-    keyInput(window, GLFW_KEY_B, std::bind(&Cube::XPrime, &cube));
-    keyInput(window, GLFW_KEY_N, std::bind(&Cube::XPrime, &cube));
-    // Z
-    keyInput(window, GLFW_KEY_P, std::bind(&Cube::Z, &cube));
-    // Z'
-    keyInput(window, GLFW_KEY_Q, std::bind(&Cube::ZPrime, &cube));
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (action == GLFW_PRESS && currentMode == Mode::Solve) {
+        // Escape button closes window
+        if (key == GLFW_KEY_ESCAPE) {
+            cube.resetFacelets();
+        } else if (key == GLFW_KEY_SPACE) {
+            cube.scramble();
+        } else if (keyMoves.find(key) != keyMoves.end()) {
+            performMove(keyMoves.at(key));
+        } else if (keyRotations.find(key) != keyRotations.end()) {
+            possibleRotations.at(keyRotations.at(key))();
+        }
+    }
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -1076,12 +1079,14 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                         button.runAction();
                     }
                 }
+                break;
             case Solve:
                 for (Button button : solveButtons) {
                     if (button.mouseIsHover(xPos, yPos)) {
                         button.runAction();
                     }
                 }
+                break;
         }
     }
 }

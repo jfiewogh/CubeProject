@@ -67,6 +67,7 @@
         "random": "cpp",
         "stack": "cpp",
         "fstream": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "*.rh": "cpp"
     }
 }
